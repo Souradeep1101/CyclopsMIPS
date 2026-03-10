@@ -1,0 +1,11 @@
+# Build outputs
+out/
+.vs/
+*.user
+*.suo
+*.ncb
+*.aps
+
+# Temp files
+build_err*.txt
+test_output.txt
