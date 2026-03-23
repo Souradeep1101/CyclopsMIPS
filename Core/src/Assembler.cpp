@@ -12,7 +12,7 @@ namespace MIPS {
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
-std::expected<MachineCode, std::string>
+std::expected<AssembledProgram, std::string>
 Assembler::assemble(const std::string& source) {
     // Lex
     Lexer lexer(source);
@@ -169,10 +169,10 @@ Assembler::checkShamt(int32_t value, int lineNum, const std::string& opcode) {
 // ---------------------------------------------------------------------------
 // Pass 2: Machine Code Generation
 // ---------------------------------------------------------------------------
-std::expected<MachineCode, std::string>
+std::expected<AssembledProgram, std::string>
 Assembler::generateCode(const std::vector<ParsedInstruction>& instructions,
                          const SymbolTable& symbols) {
-    MachineCode code;
+    AssembledProgram program;
     uint32_t currentAddress = 0x0000;
 
     for (const auto& instr : instructions) {
@@ -181,6 +181,18 @@ Assembler::generateCode(const std::vector<ParsedInstruction>& instructions,
 
         const std::string& op = instr.opcode;
         uint32_t word = 0;
+
+        // Reconstruct Source String String 
+        std::string sourceStr = op;
+        for (size_t i = 0; i < instr.operands.size(); ++i) {
+            sourceStr += (i == 0) ? " " : ", ";
+            if (std::holds_alternative<std::string>(instr.operands[i])) {
+                sourceStr += std::get<std::string>(instr.operands[i]);
+            } else {
+                sourceStr += std::to_string(std::get<int32_t>(instr.operands[i]));
+            }
+        }
+        program.sourceMap[currentAddress] = { instr.lineNum, sourceStr };
 
         // ---------------------------------------------------------------
         // R-TYPE instructions: rd, rs, rt, shamt, funct
@@ -356,11 +368,11 @@ Assembler::generateCode(const std::vector<ParsedInstruction>& instructions,
                 std::format("Line {}: Unknown opcode '{}'", instr.lineNum, instr.opcode));
         }
 
-        code.push_back(word);
+        program.machineCode.push_back(word);
         currentAddress += 4;
     }
 
-    return code;
+    return program;
 }
 
 } // namespace MIPS

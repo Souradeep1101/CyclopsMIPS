@@ -191,7 +191,15 @@ std::expected<ParsedInstruction, std::string> Parser::parseInstruction() {
     // not expecting one (i.e., we haven't just seen a comma or this is the
     // very first peek after the mnemonic and registers are exhausted).
     if (peek().type == TokenType::Opcode && !expectOperand) {
-      break; // This is the next instruction's mnemonic
+      std::string opU = instr.opcode;
+      for (auto &c : opU) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+      
+      if ((opU == "J" || opU == "JAL") && instr.operands.empty()) {
+        // Special case: J and JAL take exactly one label operand. 
+        // Do not break; consume the identifier as the operand.
+      } else {
+        break; // This is the next instruction's mnemonic
+      }
     }
 
     // Memory offset operands like `10($t0)` parse as: Immediate, LParen,

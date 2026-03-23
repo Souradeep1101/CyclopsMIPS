@@ -1,0 +1,132 @@
+#include "UI_Widgets.h"
+#include "Core/CPU.h"
+#include "Assembler/Assembler.h"
+#include <imgui.h>
+
+struct PipelineSnapshot {
+    uint64_t cycle;
+    std::string if_stage;
+    std::string id_stage;
+    std::string ex_stage;
+    std::string mem_stage;
+    std::string wb_stage;
+    std::string notes;
+};
+
+static std::vector<PipelineSnapshot> history;
+static uint64_t last_recorded_cycle = ~(0ULL);
+
+namespace MIPS::UI {
+    void DrawPipelineWidget(const CPU& cpu, const AssembledProgram* program) {
+        ImGui::Begin("Pipeline Datapath");
+        
+        const auto& state = cpu.getState();
+        uint64_t current_cycle = state.perf.cycles;
+
+        // Reset history if CPU was reset or we travel back in time
+        if (current_cycle < last_recorded_cycle && current_cycle == 0) {
+            history.clear();
+            last_recorded_cycle = ~(0ULL);
+        }
+
+        auto getMnemonic = [&](uint32_t pc) -> std::string {
+            if (program && program->sourceMap.count(pc)) {
+                return program->sourceMap.at(pc).mnemonic;
+            }
+            return "-";
+        };
+
+        // Record new cycle snapshot if emulator stepped!
+        if (current_cycle > last_recorded_cycle || (current_cycle == 0 && history.empty())) {
+            PipelineSnapshot snap;
+            snap.cycle = current_cycle;
+            
+            snap.if_stage = cpu.if_id.valid ? getMnemonic(cpu.if_id.pc) : "";
+            snap.id_stage = cpu.id_ex.valid ? getMnemonic(cpu.id_ex.pc) : "";
+            snap.ex_stage = cpu.ex_mem.valid ? getMnemonic(cpu.ex_mem.pc) : "";
+            snap.mem_stage = cpu.mem_wb.valid ? getMnemonic(cpu.mem_wb.pc) : "";
+            
+            if (cpu.mem_wb.valid && cpu.mem_wb.regWrite) {
+                // If the instruction in WB stage is writing, get its mnemonic from somewhere...
+                // Wait, mem_wb.pc is tracked precisely for debugging now!
+                snap.wb_stage = getMnemonic(cpu.mem_wb.pc);
+            } else if (cpu.mem_wb.valid) {
+                 snap.wb_stage = getMnemonic(cpu.mem_wb.pc); // Still retiring, maybe just not writing Reg
+            }
+
+            // Simple note generation (e.g. Hazards)
+            if (cpu.hazardFlags & 0x1) {
+                snap.notes = "Stall (Load-Use)";
+            } else if (cpu.hazardFlags & 0x2) {
+                snap.notes = "Branch Taken (Flush)";
+            }
+
+            history.push_back(snap);
+            last_recorded_cycle = current_cycle;
+            
+            // Limit history size to prevent infinite memory leak during long plays
+            if (history.size() > 1000) {
+                // Remove first 500
+                history.erase(history.begin(), history.begin() + 500);
+            }
+        }
+
+        // --- Render Table ---
+        if (ImGui::BeginTable("ExecutionTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
+            ImGui::TableSetupScrollFreeze(0, 1); // Freeze header
+            ImGui::TableSetupColumn("Cycle", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+            ImGui::TableSetupColumn("IF", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("EX", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("MEM", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("WB", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Notes", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+
+            // Render all historical records
+            for (const auto& snap : history) {
+                ImGui::TableNextRow();
+                
+                ImGui::TableNextColumn(); ImGui::Text("%llu", snap.cycle);
+                
+                // Active highlighting using standard ImGui Color text for stages
+                // IF
+                ImGui::TableNextColumn();
+                if (!snap.if_stage.empty()) ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", snap.if_stage.c_str());
+                else ImGui::TextDisabled("-");
+
+                // ID
+                ImGui::TableNextColumn();
+                if (!snap.id_stage.empty()) ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.6f, 1.0f), "%s", snap.id_stage.c_str());
+                else ImGui::TextDisabled("-");
+
+                // EX
+                ImGui::TableNextColumn();
+                if (!snap.ex_stage.empty()) ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "%s", snap.ex_stage.c_str());
+                else ImGui::TextDisabled("-");
+
+                // MEM
+                ImGui::TableNextColumn();
+                if (!snap.mem_stage.empty()) ImGui::TextColored(ImVec4(0.8f, 0.4f, 1.0f, 1.0f), "%s", snap.mem_stage.c_str());
+                else ImGui::TextDisabled("-");
+
+                // WB
+                ImGui::TableNextColumn();
+                if (!snap.wb_stage.empty()) ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", snap.wb_stage.c_str());
+                else ImGui::TextDisabled("-");
+
+                // Notes
+                ImGui::TableNextColumn(); 
+                if (!snap.notes.empty()) ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "%s", snap.notes.c_str());
+            }
+            
+            // Auto-scroll to bottom if at maximum scroll
+            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+                ImGui::SetScrollHereY(1.0f);
+
+            ImGui::EndTable();
+        }
+
+        ImGui::End();
+    }
+}

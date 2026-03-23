@@ -4,9 +4,9 @@
 
 namespace MIPS {
 
-CPU::CPU()
-    : regFile(state), memory(4 * 1024 * 1024), l1i_cache(memory),
-      l1d_cache(memory) { // 4MB RAM
+CPU::CPU(MemoryBus& bus_ref)
+    : regFile(state), bus(bus_ref), l1i_cache(bus_ref),
+      l1d_cache(bus_ref) {
   reset();
 }
 
@@ -16,29 +16,37 @@ void CPU::reset() {
   state.regs.fill(0);
   state.hi = 0;
   state.lo = 0;
+  state.perf.reset();
+
+  stallCycles = 0;
+  stallSource = StallSource::None;
+  pcOverride = false;
+  pcOverrideValue = 0;
+  flushNextFetch = false;
+  loadUseHazard = false;
 
   btb.reset();
   l1i_cache.reset();
   l1d_cache.reset();
-  stallCycles = 0;
-  stallSource = StallSource::None;
-
-  pcOverride = false;
-  flushNextFetch = false;
 
   if_id = IF_ID{};
   id_ex = ID_EX{};
   ex_mem = EX_MEM{};
   mem_wb = MEM_WB{};
+  mem_wb_old = MEM_WB{}; // Snapshot for correct pipeline forwarding
 }
 
 bool CPU::loadProgram(const std::vector<uint32_t> &binary) {
-  return memory.loadProgram(binary, 0x0000);
+  return bus.loadProgram(binary, 0x0000);
 }
 
 std::expected<void, std::string> CPU::step() {
+  state.perf.cycles++; // Every call to step() = 1 clock cycle
+  mem_wb_old = mem_wb; // Snapshot for pipeline forwarding
+
   if (stallCycles > 0) {
     stallCycles--;
+    state.perf.stallCycles++;
 
     // Drain pipeline stages AFTER the stall point.
     if (stallSource == StallSource::Memory) {
@@ -53,8 +61,12 @@ std::expected<void, std::string> CPU::step() {
       auto decRes = decode();
       if (!decRes)
         return std::unexpected(decRes.error());
-
-      if_id.valid = false; // Bubble
+      
+      // If a load-use hazard was detected while draining the Fetch stall,
+      // KEEP if_id so it can be decoded next cycle.
+      if (!loadUseHazard) {
+        if_id.valid = false; // Bubble
+      }
     }
     return {};
   }
@@ -77,14 +89,24 @@ std::expected<void, std::string> CPU::step() {
   if (!decRes)
     return std::unexpected(decRes.error());
 
-  auto fetRes = fetch();
-  if (!fetRes)
-    return std::unexpected(fetRes.error());
+  if (loadUseHazard) {
+    // 1-cycle pipeline bubble injected by decode. IF and PC are frozen.
+    hazardFlags |= 0x1;
+    loadUseHazard = false;
+  } else {
+    auto fetRes = fetch();
+    if (!fetRes)
+      return std::unexpected(fetRes.error());
 
-  if (stallCycles > 0) {
-    // fetch requested a stall!
-    if_id.valid = false;
-    return {}; // Freeze PC
+    if (stallCycles > 0) {
+      // fetch requested a multi-cycle stall (I-Cache miss)
+      if_id.valid = false;
+      return {}; // Freeze PC
+    }
+  }
+
+  if (flushNextFetch) {
+      hazardFlags |= 0x2;
   }
 
   // Latch PC at the end of the clock cycle
@@ -96,6 +118,8 @@ std::expected<void, std::string> CPU::step() {
 void CPU::writeBack() {
   if (!mem_wb.valid)
     return;
+
+  state.perf.instructions++; // Count instructions retiring from the pipeline
 
   uint32_t writeData = mem_wb.memToReg ? mem_wb.readData : mem_wb.aluResult;
 
@@ -110,6 +134,7 @@ std::expected<void, std::string> CPU::memoryAccess() {
     return {};
 
   // Pass-through signals
+  mem_wb.pc = ex_mem.pc;
   mem_wb.aluResult = ex_mem.aluResult;
   mem_wb.destReg = ex_mem.destReg;
   mem_wb.regWrite = ex_mem.regWrite;
@@ -140,45 +165,48 @@ std::expected<void, std::string> CPU::memoryAccess() {
 }
 
 void CPU::execute() {
-  ex_mem.valid = id_ex.valid;
-  if (!id_ex.valid)
+  if (!id_ex.valid) {
+    ex_mem.valid = false;
     return;
+  }
 
   // Forwarding Unit
   uint8_t forwardA = 0; // 0: ID/EX, 1: MEM/WB, 2: EX/MEM
   uint8_t forwardB = 0;
 
   // EX Hazard (Forward from EX/MEM)
-  if (ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == id_ex.rs) {
-    forwardA = 2;
-  }
-  if (ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == id_ex.rt) {
-    forwardB = 2;
-  }
+  if (enableForwarding) {
+    if (ex_mem.valid && ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == id_ex.rs) {
+      forwardA = 2;
+    }
+    if (ex_mem.valid && ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == id_ex.rt) {
+      forwardB = 2;
+    }
 
-  // MEM Hazard (Forward from MEM/WB)
-  if (mem_wb.regWrite && mem_wb.destReg != 0 &&
-      !(ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == id_ex.rs) &&
-      mem_wb.destReg == id_ex.rs) {
-    forwardA = 1;
-  }
-  if (mem_wb.regWrite && mem_wb.destReg != 0 &&
-      !(ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == id_ex.rt) &&
-      mem_wb.destReg == id_ex.rt) {
-    forwardB = 1;
+    // MEM Hazard (Forward from MEM/WB using the old snapshot BEFORE memoryAccess)
+    if (mem_wb_old.valid && mem_wb_old.regWrite && mem_wb_old.destReg != 0 &&
+        !(ex_mem.valid && ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == id_ex.rs) &&
+        mem_wb_old.destReg == id_ex.rs) {
+      forwardA = 1;
+    }
+    if (mem_wb_old.valid && mem_wb_old.regWrite && mem_wb_old.destReg != 0 &&
+        !(ex_mem.valid && ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == id_ex.rt) &&
+        mem_wb_old.destReg == id_ex.rt) {
+      forwardB = 1;
+    }
   }
 
   // ALU Source 1 Mux
   uint32_t operand1 = id_ex.regData1;
   if (forwardA == 1)
-    operand1 = (mem_wb.memToReg) ? mem_wb.readData : mem_wb.aluResult;
+    operand1 = (mem_wb_old.memToReg) ? mem_wb_old.readData : mem_wb_old.aluResult;
   else if (forwardA == 2)
     operand1 = ex_mem.aluResult;
 
   // ForwardB Mux Data (Used for Memory Write Data)
   uint32_t forwardBData = id_ex.regData2;
   if (forwardB == 1)
-    forwardBData = (mem_wb.memToReg) ? mem_wb.readData : mem_wb.aluResult;
+    forwardBData = (mem_wb_old.memToReg) ? mem_wb_old.readData : mem_wb_old.aluResult;
   else if (forwardB == 2)
     forwardBData = ex_mem.aluResult;
 
@@ -199,42 +227,40 @@ void CPU::execute() {
   ex_mem.destReg = id_ex.regDst ? id_ex.rd : id_ex.rt;
 
   // Pass-through
+  ex_mem.pc = id_ex.pc;
   ex_mem.writeData = forwardBData; // Pushed forward data to Memory
   ex_mem.memRead = id_ex.memRead;
   ex_mem.memWrite = id_ex.memWrite;
   ex_mem.regWrite = id_ex.regWrite;
   ex_mem.memToReg = id_ex.memToReg;
+  ex_mem.valid = true;
+
+  // printf("EXEC[PC=%d]: valid=%d, fA=%d, fB=%d, op1=%d, op2=%d, aluRes=%d, destReg=%d, mwb_old(v=%d,rW=%d,d=%d,m2r=%d,rD=%d,aR=%d), rs=%d, rt=%d\n",
+  //        id_ex.pcPlus4 - 4, id_ex.valid, forwardA, forwardB, operand1, operand2, ex_mem.aluResult, ex_mem.destReg,
+  //        mem_wb_old.valid, mem_wb_old.regWrite, mem_wb_old.destReg, mem_wb_old.memToReg, mem_wb_old.readData, mem_wb_old.aluResult,
+  //        id_ex.rs, id_ex.rt);
 }
 
 std::expected<void, std::string> CPU::decode() {
-  id_ex.valid = if_id.valid;
-  if (!if_id.valid)
+  if (!if_id.valid) {
+    id_ex.valid = false;
     return {};
+  }
 
   Instruction instr = if_id.instr;
   uint8_t op = instr.opcode();
+  uint8_t rs = instr.rs();
+  uint8_t rt = instr.rt();
 
-  id_ex.pcPlus4 = if_id.pcPlus4;
-  id_ex.rs = instr.rs();
-  id_ex.rt = instr.rt();
-  id_ex.rd = instr.rd();
-  id_ex.shamt = instr.shamt();
+  // Hazard Detection Unit evaluates BEFORE id_ex is overwritten
+  if (enableHazardDetection && id_ex.valid && id_ex.memRead && ((id_ex.rt == rs) || (id_ex.rt == rt))) {
+    // Stall the pipeline: Prevent PC from incrementing
+    state.next_pc = state.pc; 
+    loadUseHazard = true;
 
-  // Hazard Detection Unit
-  // If the instruction in EX is a Load (memRead is true)
-  // AND its destination register matches either source register of the current
-  // instruction
-  if (id_ex.memRead && ((id_ex.rt == instr.rs()) || (id_ex.rt == instr.rt()))) {
-    // Stall the pipeline
-    // 1. Prevent PC from incrementing (re-fetch the same instruction next
-    // cycle)
-    state.next_pc = state.pc; // Keep PC at current instruction
-
-    // 2. Preserve IF/ID latch (the decode() stage will run on this instruction
-    // again next cycle) (Done implicitly by NOT invalidating if_id.valid and
-    // re-winding PC)
-
-    // 3. Insert a bubble into ID_EX
+    // Preserving IF/ID latch is handled by skipping fetch() in step()
+    
+    // Insert a bubble into ID_EX
     id_ex.regDst = false;
     id_ex.aluSrc = false;
     id_ex.memRead = false;
@@ -247,30 +273,35 @@ std::expected<void, std::string> CPU::decode() {
     return {};
   }
 
-  // Read Register File (in a real CPU, this happens concurrently with control
-  // logic)
-  uint32_t regData1_raw = regFile.read(id_ex.rs);
-  uint32_t regData2_raw = regFile.read(id_ex.rt);
+  id_ex.valid = true; // Write ID/EX Latch
+  id_ex.pc = if_id.pc;
+  id_ex.pcPlus4 = if_id.pcPlus4;
+  id_ex.rs = rs;
+  id_ex.rt = rt;
+  id_ex.rd = instr.rd();
+  id_ex.shamt = instr.shamt();
+
+  // Read Register File (in a real CPU, this happens concurrently with control logic)
+  uint32_t regData1_raw = regFile.read(rs);
+  uint32_t regData2_raw = regFile.read(rt);
 
   // Early Forwarding for Branch Resolution (in ID Stage)
-  // If a branch depends on the ALU result of the immediately preceding
-  // instruction (in EX) or the instruction before that (in MEM), we must
-  // forward it here before comparison.
-
   id_ex.regData1 = regData1_raw;
-  if (ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == id_ex.rs) {
-    id_ex.regData1 = ex_mem.aluResult;
-  } else if (mem_wb.regWrite && mem_wb.destReg != 0 &&
-             mem_wb.destReg == id_ex.rs) {
-    id_ex.regData1 = mem_wb.memToReg ? mem_wb.readData : mem_wb.aluResult;
+  if (enableForwarding) {
+    if (ex_mem.valid && ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == rs) {
+      id_ex.regData1 = ex_mem.aluResult;
+    } else if (mem_wb.valid && mem_wb.regWrite && mem_wb.destReg != 0 && mem_wb.destReg == rs) {
+      id_ex.regData1 = mem_wb.memToReg ? mem_wb.readData : mem_wb.aluResult;
+    }
   }
 
   id_ex.regData2 = regData2_raw;
-  if (ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == id_ex.rt) {
-    id_ex.regData2 = ex_mem.aluResult;
-  } else if (mem_wb.regWrite && mem_wb.destReg != 0 &&
-             mem_wb.destReg == id_ex.rt) {
-    id_ex.regData2 = mem_wb.memToReg ? mem_wb.readData : mem_wb.aluResult;
+  if (enableForwarding) {
+    if (ex_mem.valid && ex_mem.regWrite && ex_mem.destReg != 0 && ex_mem.destReg == rt) {
+      id_ex.regData2 = ex_mem.aluResult;
+    } else if (mem_wb.valid && mem_wb.regWrite && mem_wb.destReg != 0 && mem_wb.destReg == rt) {
+      id_ex.regData2 = mem_wb.memToReg ? mem_wb.readData : mem_wb.aluResult;
+    }
   }
 
   uint16_t imm = instr.imm();
@@ -385,10 +416,12 @@ std::expected<void, std::string> CPU::decode() {
     uint32_t target = id_ex.pcPlus4 + (id_ex.signExtImm << 2);
 
     // Update BTB
-    btb.update(if_id.pc, target, shouldBranch);
+    if (enableBranchPrediction) {
+      btb.update(if_id.pc, target, shouldBranch);
+    }
 
     if (shouldBranch) {
-      if (if_id.predictedTaken && if_id.predictedTarget == target) {
+      if (enableBranchPrediction && if_id.predictedTaken && if_id.predictedTarget == target) {
         // Correct prediction! No flush.
       } else {
         // Mispredicted not taken (or wrong target). Flush IF, jump.
@@ -397,7 +430,7 @@ std::expected<void, std::string> CPU::decode() {
         flushNextFetch = true;
       }
     } else {
-      if (if_id.predictedTaken) {
+      if (enableBranchPrediction && if_id.predictedTaken) {
         // Mispredicted taken. Flush IF, resume normal execution.
         pcOverride = true;
         pcOverrideValue = id_ex.pcPlus4;
@@ -423,9 +456,11 @@ std::expected<void, std::string> CPU::decode() {
     uint32_t target = (id_ex.pcPlus4 & 0xF0000000) | (instr.target() << 2);
 
     // Update BTB
-    btb.update(if_id.pc, target, true);
+    if (enableBranchPrediction) {
+      btb.update(if_id.pc, target, true);
+    }
 
-    if (if_id.predictedTaken && if_id.predictedTarget == target) {
+    if (enableBranchPrediction && if_id.predictedTaken && if_id.predictedTarget == target) {
       // Correct prediction!
     } else {
       // Mispredict!
@@ -499,7 +534,7 @@ std::expected<void, std::string> CPU::fetch() {
   } else {
     // BTB Prediction
     uint32_t predictedTarget = 0;
-    if (btb.predict(state.pc, predictedTarget)) {
+    if (enableBranchPrediction && btb.predict(state.pc, predictedTarget)) {
       if_id.predictedTaken = true;
       if_id.predictedTarget = predictedTarget;
       state.next_pc = predictedTarget;

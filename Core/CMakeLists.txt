@@ -4,6 +4,7 @@ add_library(CyclopsCore STATIC
     src/ALU.cpp
     src/RegisterFile.cpp
     src/DataMemory.cpp
+    src/MemoryBus.cpp
     src/Parser.cpp
     src/Assembler.cpp
 )

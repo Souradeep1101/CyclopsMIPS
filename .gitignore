@@ -1,11 +1,16 @@
 # Build outputs
 out/
+bin/
+build/
 .vs/
 *.user
 *.suo
 *.ncb
 *.aps
 
-# Temp files
+# Temp and log files
+err.log
+err.txt
 build_err*.txt
 test_output.txt
+*.log

@@ -9,6 +9,10 @@ DataMemory::DataMemory(size_t size) : memoryPool(size), memory(&memoryPool) {
   memory.resize(size, 0); // Zero-initialize RAM
 }
 
+void DataMemory::reset() {
+  std::fill(memory.begin(), memory.end(), static_cast<uint8_t>(0));
+}
+
 std::expected<uint32_t, std::string>
 DataMemory::readWord(uint32_t address) const {
   // 1. Check Bounds

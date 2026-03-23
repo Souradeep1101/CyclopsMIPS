@@ -13,6 +13,9 @@ public:
   // Initialize with size (default 4MB)
   explicit DataMemory(size_t size = 4 * 1024 * 1024);
 
+  // Wipes the entire memory array zero
+  void reset();
+
   // Read a 32-bit word (checks alignment)
   [[nodiscard]]
   std::expected<uint32_t, std::string> readWord(uint32_t address) const;

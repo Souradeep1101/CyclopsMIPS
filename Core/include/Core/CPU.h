@@ -11,6 +11,8 @@
 #include "PipelineLatches.h"
 #include "RegisterFile.h"
 #include "State.h"
+#include "Core/MemoryBus.h"
+#include <atomic>
 
 
 namespace MIPS {
@@ -19,7 +21,7 @@ enum class StallSource { None, Fetch, Memory };
 
 class CPU {
 public:
-  CPU();
+  explicit CPU(MemoryBus& bus);
 
   // Resets PC to 0, clears registers and latches
   void reset();
@@ -31,14 +33,32 @@ public:
   [[nodiscard]]
   std::expected<void, std::string> step();
 
-  // Inspection for UI/Tests
+  // Inspection/Mutation for UI/Tests
   const CpuState &getState() const { return state; }
-  const DataMemory &getMemory() const { return memory; }
+  void setRegister(uint8_t reg, uint32_t val) { regFile.write(reg, val); }
+  
+  const MemoryBus &getMemoryBus() const { return bus; }
+  // Pipeline Optimization Toggles (for educational visualization)
+  bool enableForwarding = true;
+  bool enableHazardDetection = true;
+  bool enableBranchPrediction = true;
+
+  // Pipeline Latches (Made public temporarily for debugging)
+  IF_ID if_id;
+  ID_EX id_ex;
+  EX_MEM ex_mem;
+  MEM_WB mem_wb;
+  MEM_WB mem_wb_old;
+
+  uint32_t hazardFlags = 0; // 0x1: Load-Use, 0x2: Branch Flush
 
 private:
   CpuState state;
   RegisterFile regFile;
-  DataMemory memory;
+  MemoryBus& bus;
+  
+  // Thread-safe interrupt flag for Phase 8 MMIO integration
+  std::atomic<bool> hardwareInterruptPending{false};
 
   // Branch Target Buffer (Dynamic Branch Prediction)
   BTB btb;
@@ -51,16 +71,11 @@ private:
   uint32_t stallCycles = 0;
   StallSource stallSource = StallSource::None;
 
-  // Pipeline Latches
-  IF_ID if_id;
-  ID_EX id_ex;
-  EX_MEM ex_mem;
-  MEM_WB mem_wb;
-
   // Branch Resolution Signals (for cycle-accurate branch penalties)
   bool pcOverride = false;
   uint32_t pcOverrideValue = 0;
   bool flushNextFetch = false;
+  bool loadUseHazard = false;
 
   // Pipeline Stages
   void writeBack();

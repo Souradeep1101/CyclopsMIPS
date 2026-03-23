@@ -20,6 +20,7 @@ struct IF_ID {
 
 // Instruction Decode to Execute
 struct ID_EX {
+  uint32_t pc = 0; // Architectural tracker
   uint32_t pcPlus4 = 0;
   uint32_t regData1 = 0;
   uint32_t regData2 = 0;
@@ -48,6 +49,7 @@ struct ID_EX {
 
 // Execute to Memory
 struct EX_MEM {
+  uint32_t pc = 0; // Architectural tracker
   uint32_t aluResult = 0;
   uint32_t writeData = 0; // Data to write to memory (from ID_EX.regData2)
   uint8_t destReg = 0;    // Muxed destination register (rt or rd)
@@ -65,6 +67,7 @@ struct EX_MEM {
 
 // Memory to Writeback
 struct MEM_WB {
+  uint32_t pc = 0; // Architectural tracker
   uint32_t readData = 0;  // Data read from memory
   uint32_t aluResult = 0; // Passed through from EX
   uint8_t destReg = 0;

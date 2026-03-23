@@ -1,5 +1,5 @@
 #pragma once
-#include "DataMemory.h"
+#include "Core/MemoryBus.h"
 #include <array>
 #include <cstdint>
 
@@ -23,7 +23,7 @@ public:
     std::array<uint8_t, LINE_SIZE> data = {0};
   };
 
-  L1Cache(DataMemory &mainMemory) : memory(mainMemory) { reset(); }
+  L1Cache(MemoryBus &mainBus) : bus(mainBus) { reset(); }
 
   void reset() {
     for (auto &line : lines) {
@@ -68,14 +68,14 @@ public:
       for (size_t i = 0; i < LINE_SIZE; i += 4) {
         uint32_t writeVal;
         std::memcpy(&writeVal, &line.data[i], sizeof(uint32_t));
-        (void)memory.writeWord(oldAddress + static_cast<uint32_t>(i), writeVal);
+        (void)bus.writeWord(oldAddress + static_cast<uint32_t>(i), writeVal);
       }
     }
 
     // 2. Fetch new line from Main Memory
     uint32_t baseAddress = address - offset;
     for (size_t i = 0; i < LINE_SIZE; i += 4) {
-      auto valOpt = memory.readWord(baseAddress + static_cast<uint32_t>(i));
+      auto valOpt = bus.readWord(baseAddress + static_cast<uint32_t>(i));
       uint32_t readVal = valOpt.value_or(0); // If out of bounds, read 0
       std::memcpy(&line.data[i], &readVal, sizeof(uint32_t));
     }
@@ -118,14 +118,14 @@ public:
       for (size_t i = 0; i < LINE_SIZE; i += 4) {
         uint32_t writeVal;
         std::memcpy(&writeVal, &line.data[i], sizeof(uint32_t));
-        (void)memory.writeWord(oldAddress + static_cast<uint32_t>(i), writeVal);
+        (void)bus.writeWord(oldAddress + static_cast<uint32_t>(i), writeVal);
       }
     }
 
     // 2. Fetch line from memory
     uint32_t baseAddress = address - offset;
     for (size_t i = 0; i < LINE_SIZE; i += 4) {
-      auto valOpt = memory.readWord(baseAddress + static_cast<uint32_t>(i));
+      auto valOpt = bus.readWord(baseAddress + static_cast<uint32_t>(i));
       uint32_t readVal = valOpt.value_or(0);
       std::memcpy(&line.data[i], &readVal, sizeof(uint32_t));
     }
@@ -145,7 +145,7 @@ public:
   uint64_t getMisses() const { return stats_misses; }
 
 private:
-  DataMemory &memory;
+  MemoryBus &bus;
   std::array<CacheLine, NUM_LINES> lines;
 
   uint64_t stats_hits = 0;

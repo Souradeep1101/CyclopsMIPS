@@ -9,14 +9,23 @@
 
 namespace MIPS {
 
+struct SourceLine {
+    int lineNum;
+    std::string mnemonic;
+};
+
 // The result from a successful assembly: a program ready to be loaded into CPU
 using MachineCode = std::vector<uint32_t>;
+struct AssembledProgram {
+    MachineCode machineCode;
+    std::unordered_map<uint32_t, SourceLine> sourceMap;
+};
 
 // The top-level Assembler: converts a MIPS assembly source string → MachineCode
 class Assembler {
 public:
     // Main entry point.  Returns machine code or a human-readable error string.
-    static std::expected<MachineCode, std::string>
+    static std::expected<AssembledProgram, std::string>
     assemble(const std::string& source);
 
 private:
@@ -29,7 +38,7 @@ private:
     buildSymbolTable(const std::vector<ParsedInstruction>& instructions);
 
     // Pass 2 – translate each ParsedInstruction into a 32-bit word.
-    static std::expected<MachineCode, std::string>
+    static std::expected<AssembledProgram, std::string>
     generateCode(const std::vector<ParsedInstruction>& instructions,
                  const SymbolTable& symbols);
 
