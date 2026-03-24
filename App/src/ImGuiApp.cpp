@@ -109,6 +109,9 @@ ImGuiApp::~ImGuiApp() {
         emuThread.join();
     }
 
+    // Release GPU texture memory before tearing down the GL context
+    CleanupArchitectureWidget();
+
     if (window) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();

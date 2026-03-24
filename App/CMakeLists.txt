@@ -8,6 +8,15 @@ add_executable(CyclopsApp
     src/UI_ArchitectureWidget.cpp
     src/UI_SignalsWidget.cpp
     src/TextEditor.cpp
+    src/TextureLoader.cpp
+)
+
+# Post-build: copy assets directory next to the executable
+add_custom_command(TARGET CyclopsApp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:CyclopsApp>/assets"
+    COMMENT "Copying assets to output directory"
 )
 
 # Phase 9: UI Dependencies (GLFW, Glad, ImGui)
