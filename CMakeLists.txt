@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.20.1)
 # Project Name and Version
 project(CyclopsMIPS VERSION 0.1.0 LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Fix for older third_party CMake dependencies (like Glad)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
@@ -22,4 +24,4 @@ add_subdirectory(App)
 
 # Phase 7: Test & Benchmark suite
 enable_testing()
-add_subdirectory(Tests)
+add_subdirectory(Tests)
