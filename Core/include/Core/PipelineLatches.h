@@ -44,6 +44,10 @@ struct ID_EX {
   bool regWrite = false;
   bool memToReg = false;
 
+  // Branch Control Signal (set by Control unit in ID stage)
+  bool branch = false;
+  uint32_t branchTarget = 0;
+
   bool valid = false;
 };
 
@@ -61,6 +65,12 @@ struct EX_MEM {
   // Writeback Control Signals
   bool regWrite = false;
   bool memToReg = false;
+
+  // Branch Resolution (AND gate output = branch & aluZero)
+  bool aluZero = false;       // ALU zero flag from execute stage
+  bool branch  = false;       // Branch control signal passed from ID/EX
+  bool pcSrc   = false;       // AND gate output: branch & zero
+  uint32_t branchTarget = 0;  // Computed branch target address
 
   bool valid = false;
 };

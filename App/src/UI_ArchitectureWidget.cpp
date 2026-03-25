@@ -61,7 +61,7 @@ struct SchematicWire {
 
 // ---- Node Definitions -----------------------------------------------------
 
-static const std::array<SchematicNode, 22> kNodes = {{
+static const std::array<SchematicNode, 23> kNodes = {{
     // --- Far left ---
     { "ExcMux",   "Mux",     0.020f, 0.380f, 0.022f, 0.090f, Shape::Trapezoid, nullptr },
     { "PC",       "PC",      0.055f, 0.400f, 0.035f, 0.080f, Shape::Rect,
@@ -108,6 +108,10 @@ static const std::array<SchematicNode, 22> kNodes = {{
 
     // --- Writeback ---
     { "WBMux",    "Mux",     0.920f, 0.330f, 0.025f, 0.085f, Shape::Trapezoid, nullptr },
+
+    // --- Branch AND Gate (MEM stage, after EX/MEM latch per P&H Fig 4.66) ---
+    { "BranchAND", "AND",   0.745f, 0.240f, 0.030f, 0.035f, Shape::Ellipse,
+      [](const CPU& c) { return c.ex_mem.pcSrc ? std::string("PCSrc=1") : std::string("PCSrc=0"); } },
 }};
 
 // A separate node list for bottom control units (drawn later, on top)
@@ -204,6 +208,27 @@ static const std::vector<SchematicWire> kWires = {
     { "WB_out", "WB Data", {{ {0.945f,0.373f}, {0.970f,0.373f}, {0.970f,0.920f}, {0.305f,0.920f}, {0.305f,0.470f} }},
       [](const CPU& c){ return c.mem_wb.valid && c.mem_wb.regWrite; },
       [](const CPU& c){ char b[20]; snprintf(b,sizeof(b),"WB:R%d",c.mem_wb.destReg); return std::string(b); } },
+
+    // --- Branch Logic ---
+    // Branch control signal: EX/MEM latch output → AND gate (MEM stage)
+    { "Branch_wire", "Branch", {{ {0.735f,0.120f}, {0.755f,0.120f}, {0.755f,0.240f} }},
+      [](const CPU& c){ return c.ex_mem.valid && c.ex_mem.branch; },
+      [](const CPU& c){ return c.ex_mem.branch ? std::string("Branch=1") : std::string("Branch=0"); } },
+
+    // ALU Zero flag: EX/MEM latch output → AND gate (MEM stage)
+    { "Zero_wire", "ALU Zero", {{ {0.735f,0.258f}, {0.745f,0.258f} }},
+      [](const CPU& c){ return c.ex_mem.valid && c.ex_mem.aluZero; },
+      [](const CPU& c){ return c.ex_mem.aluZero ? std::string("Zero=1") : std::string("Zero=0"); } },
+
+    // PCSrc: AND gate output (MEM stage) → feedback to Exception/PC Mux at IF stage
+    { "PCSrc_wire", "PCSrc", {{ {0.775f,0.258f}, {0.790f,0.258f}, {0.790f,0.960f}, {0.015f,0.960f}, {0.015f,0.425f}, {0.020f,0.425f} }},
+      [](const CPU& c){ return c.ex_mem.valid && c.ex_mem.pcSrc; },
+      [](const CPU& c){ return c.ex_mem.pcSrc ? std::string("PCSrc=1 (Branch Taken)") : std::string("PCSrc=0"); } },
+
+    // Branch target address: Add(Branch) → EX/MEM latch → full feedback to IF stage PC Mux
+    { "BrTarget_wire", "Branch Target", {{ {0.435f,0.178f}, {0.445f,0.178f}, {0.445f,0.065f}, {0.720f,0.065f}, {0.720f,0.220f}, {0.735f,0.220f}, {0.745f,0.220f}, {0.745f,0.050f}, {0.030f,0.050f}, {0.030f,0.380f} }},
+      [](const CPU& c){ return c.ex_mem.valid && c.ex_mem.pcSrc; },
+      [](const CPU& c){ char b[20]; snprintf(b,sizeof(b),"0x%04X",c.ex_mem.branchTarget); return std::string(b); } },
 };
 
 // ---- Geometry Helpers -----------------------------------------------------

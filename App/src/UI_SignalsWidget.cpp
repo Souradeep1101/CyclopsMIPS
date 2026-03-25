@@ -21,10 +21,13 @@ void DrawSignalsWidget(const CPU& cpu) {
         Row rows[] = {
             { "RegDst",   "RegDst_wire",   ex.regDst,                               ex.valid },
             { "ALUSrc",   "ALUSrc_wire",   ex.aluSrc,                               ex.valid },
+            { "Branch",   "Branch_wire",   cpu.ex_mem.branch,                       cpu.ex_mem.valid },
             { "MemToReg", "MemToReg_wire", cpu.ex_mem.memToReg,                     cpu.ex_mem.valid },
             { "RegWrite", "RegWrite_wire", cpu.mem_wb.regWrite,                     cpu.mem_wb.valid },
             { "MemRead",  "MemRead_wire",  cpu.ex_mem.memRead,                      cpu.ex_mem.valid },
             { "MemWrite", "MemWrite_wire", cpu.ex_mem.memWrite,                     cpu.ex_mem.valid },
+            { "Zero",     "Zero_wire",     cpu.ex_mem.aluZero,                      cpu.ex_mem.valid },
+            { "PCSrc",    "PCSrc_wire",    cpu.ex_mem.pcSrc,                        cpu.ex_mem.valid },
             { "ALUCtrl",  "",              static_cast<int>(ex.aluCtrl),            ex.valid },
         };
 

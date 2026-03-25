@@ -217,6 +217,12 @@ void CPU::execute() {
   auto aluRes = ALU::execute(operand1, operand2, id_ex.aluCtrl, id_ex.shamt);
   ex_mem.aluResult = aluRes.result;
 
+  // Branch AND Gate: branch & zero → pcSrc
+  ex_mem.aluZero = aluRes.zero;
+  ex_mem.branch  = id_ex.branch;
+  ex_mem.pcSrc   = id_ex.branch && aluRes.zero;
+  ex_mem.branchTarget = id_ex.branchTarget;
+
   // HI/LO Register Write (happens in EX stage for this simulation)
   if (aluRes.writesHiLo) {
     state.hi = aluRes.hiResult;
@@ -314,6 +320,8 @@ std::expected<void, std::string> CPU::decode() {
   id_ex.memWrite = false;
   id_ex.regWrite = false;
   id_ex.memToReg = false;
+  id_ex.branch = false;
+  id_ex.branchTarget = 0;
   id_ex.aluCtrl = ALUControl::NONE;
 
   // Decode Logic & Branch Resolution
@@ -414,6 +422,10 @@ std::expected<void, std::string> CPU::decode() {
       shouldBranch = (id_ex.regData1 != id_ex.regData2);
 
     uint32_t target = id_ex.pcPlus4 + (id_ex.signExtImm << 2);
+
+    // Expose branch signal for the AND gate visualisation
+    id_ex.branch = true;
+    id_ex.branchTarget = target;
 
     // Update BTB
     if (enableBranchPrediction) {
