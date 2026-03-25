@@ -52,6 +52,11 @@ public:
 
   uint32_t hazardFlags = 0; // 0x1: Load-Use, 0x2: Branch Flush
 
+  // Forwarding state (set by execute(), read by UI)
+  // 0: no forward, 1: MEM/WB forward, 2: EX/MEM forward
+  uint8_t forwardA = 0;
+  uint8_t forwardB = 0;
+
 private:
   CpuState state;
   RegisterFile regFile;

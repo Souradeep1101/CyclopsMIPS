@@ -3,24 +3,22 @@
 #include "Instruction.h"
 #include <cstdint>
 
-
 namespace MIPS {
 
 struct IF_ID {
   uint32_t pcPlus4 = 0;
   Instruction instr{0};
-  bool valid =
-      false; // True if holding valid instruction, False if stalled/flushed
+  bool valid = false; 
 
   // Branch Prediction Information
-  uint32_t pc = 0;              // PC of the fetched instruction
-  bool predictedTaken = false;  // Did the BTB predict a branch was taken?
-  uint32_t predictedTarget = 0; // Where did the BTB predict we went?
+  uint32_t pc = 0;              
+  bool predictedTaken = false;  
+  uint32_t predictedTarget = 0; 
 };
 
 // Instruction Decode to Execute
 struct ID_EX {
-  uint32_t pc = 0; // Architectural tracker
+  uint32_t pc = 0; 
   uint32_t pcPlus4 = 0;
   uint32_t regData1 = 0;
   uint32_t regData2 = 0;
@@ -31,21 +29,22 @@ struct ID_EX {
   uint8_t rd = 0;
   uint8_t shamt = 0;
 
-  // Execute Control Signals
+  // --- EX Control Bundle ---
   ALUControl aluCtrl = ALUControl::NONE;
-  bool regDst = false; // false = rt, true = rd
-  bool aluSrc = false; // false = regData2, true = signExtImm
+  bool regDst = false; 
+  bool aluSrc = false; 
 
-  // Memory Control Signals
+  // --- M Control Bundle ---
   bool memRead = false;
   bool memWrite = false;
 
-  // Writeback Control Signals
+  // --- WB Control Bundle ---
   bool regWrite = false;
   bool memToReg = false;
 
-  // Branch Control Signal (set by Control unit in ID stage)
+  // Early Branch Resolution Tracking (Moved from EX_MEM for UI)
   bool branch = false;
+  bool isBranchTaken = false; // Result of branch AND equality
   uint32_t branchTarget = 0;
 
   bool valid = false;
@@ -53,36 +52,30 @@ struct ID_EX {
 
 // Execute to Memory
 struct EX_MEM {
-  uint32_t pc = 0; // Architectural tracker
+  uint32_t pc = 0; 
   uint32_t aluResult = 0;
-  uint32_t writeData = 0; // Data to write to memory (from ID_EX.regData2)
-  uint8_t destReg = 0;    // Muxed destination register (rt or rd)
+  uint32_t writeData = 0; 
+  uint8_t destReg = 0;    
 
-  // Memory Control Signals
+  // --- M Control Bundle ---
   bool memRead = false;
   bool memWrite = false;
 
-  // Writeback Control Signals
+  // --- WB Control Bundle ---
   bool regWrite = false;
   bool memToReg = false;
-
-  // Branch Resolution (AND gate output = branch & aluZero)
-  bool aluZero = false;       // ALU zero flag from execute stage
-  bool branch  = false;       // Branch control signal passed from ID/EX
-  bool pcSrc   = false;       // AND gate output: branch & zero
-  uint32_t branchTarget = 0;  // Computed branch target address
 
   bool valid = false;
 };
 
 // Memory to Writeback
 struct MEM_WB {
-  uint32_t pc = 0; // Architectural tracker
-  uint32_t readData = 0;  // Data read from memory
-  uint32_t aluResult = 0; // Passed through from EX
+  uint32_t pc = 0; 
+  uint32_t readData = 0;  
+  uint32_t aluResult = 0; 
   uint8_t destReg = 0;
 
-  // Writeback Control Signals
+  // --- WB Control Bundle ---
   bool regWrite = false;
   bool memToReg = false;
 

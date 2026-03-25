@@ -21,13 +21,13 @@ void DrawSignalsWidget(const CPU& cpu) {
         Row rows[] = {
             { "RegDst",   "RegDst_wire",   ex.regDst,                               ex.valid },
             { "ALUSrc",   "ALUSrc_wire",   ex.aluSrc,                               ex.valid },
-            { "Branch",   "Branch_wire",   cpu.ex_mem.branch,                       cpu.ex_mem.valid },
+            { "Branch",   "Branch_wire",   ex.branch,                               ex.valid }, // Moved to ID/EX
             { "MemToReg", "MemToReg_wire", cpu.ex_mem.memToReg,                     cpu.ex_mem.valid },
             { "RegWrite", "RegWrite_wire", cpu.mem_wb.regWrite,                     cpu.mem_wb.valid },
             { "MemRead",  "MemRead_wire",  cpu.ex_mem.memRead,                      cpu.ex_mem.valid },
             { "MemWrite", "MemWrite_wire", cpu.ex_mem.memWrite,                     cpu.ex_mem.valid },
-            { "Zero",     "Zero_wire",     cpu.ex_mem.aluZero,                      cpu.ex_mem.valid },
-            { "PCSrc",    "PCSrc_wire",    cpu.ex_mem.pcSrc,                        cpu.ex_mem.valid },
+            { "IsEqual",  "EqCmp_wire",    ex.isBranchTaken,                        ex.valid }, // Updated to Early Branch
+            { "PCSrc",    "PCSrc_wire",    ex.isBranchTaken && ex.branch,           ex.valid }, // Updated to Early Branch
             { "ALUCtrl",  "",              static_cast<int>(ex.aluCtrl),            ex.valid },
         };
 
@@ -35,30 +35,26 @@ void DrawSignalsWidget(const CPU& cpu) {
             bool isSelected = (!g_schematicSelection.selectedWireId.empty() &&
                                g_schematicSelection.selectedWireId == r.wireId);
 
-            // If this row is selected from the diagram, auto-scroll to it
             if (isSelected)
                 ImGui::SetScrollHereY();
 
             ImGui::TableNextRow();
 
-            // Highlight the selected row
             if (isSelected) {
-                ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1,
-                    IM_COL32(68, 216, 241, 40));
+                ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(68, 216, 241, 40));
             }
 
             ImGui::TableSetColumnIndex(0);
             ImGui::Text("%s", r.name);
 
             ImGui::TableSetColumnIndex(1);
-            ImVec4 col = ImVec4(0.266f, 0.847f, 0.945f, 1.0f);  // Cyan
+            ImVec4 col = ImVec4(0.266f, 0.847f, 0.945f, 1.0f);
             if (!r.valid) {
                 ImGui::TextColored(ImVec4(0.5f,0.5f,0.5f,1.0f), "Bubble");
             } else {
                 ImGui::TextColored(col, "%d", r.val);
             }
 
-            // Click row → select corresponding wire in diagram
             if (ImGui::IsItemClicked() && r.wireId[0] != '\0') {
                 g_schematicSelection.selectedNodeId.clear();
                 g_schematicSelection.selectedWireId = r.wireId;
