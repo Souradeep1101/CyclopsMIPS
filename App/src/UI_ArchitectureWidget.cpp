@@ -62,7 +62,7 @@ namespace Pal {
 }
 
 // ---- Enums & Structs ------------------------------------------------------
-enum class Shape { Rect, Ellipse, Trapezoid, Latch };
+enum class Shape { Rect, Ellipse, Trapezoid, Latch, Capsule, AndGate, OrGate, ALU_Shape };
 enum class WireType { Data, Control };
 enum class Port { Top, Bottom, Left, Right, Center };
 enum class RouteStyle {
@@ -525,6 +525,64 @@ static void DrawNodeShape(ImDrawList* dl, const SchematicNode& n,
         dl->AddPolyline(pts, 4, border, ImDrawFlags_Closed, thick);
         break;
     }
+    case Shape::Capsule: {
+        float rounding = (x1 - x0) * 0.5f; 
+        dl->AddRectFilled(ImVec2(x0,y0), ImVec2(x1,y1), fill, rounding);
+        dl->AddRect(ImVec2(x0,y0), ImVec2(x1,y1), border, rounding, 0, thick);
+        break;
+    }
+    case Shape::ALU_Shape: {
+        float notchDepth = (x1 - x0) * 0.25f;
+        float notchY1 = y0 + (y1 - y0) * 0.35f;
+        float notchY2 = y0 + (y1 - y0) * 0.65f;
+        ImVec2 pts[6] = {
+            ImVec2(x0, y0),                            
+            ImVec2(x1, y0 + (y1 - y0) * 0.2f),         
+            ImVec2(x1, y1 - (y1 - y0) * 0.2f),         
+            ImVec2(x0, y1),                            
+            ImVec2(x0 + notchDepth, notchY2),          
+            ImVec2(x0 + notchDepth, notchY1)           
+        };
+        dl->AddConvexPolyFilled(pts, 6, fill);
+        dl->AddPolyline(pts, 6, border, ImDrawFlags_Closed, thick);
+        break;
+    }
+    case Shape::AndGate: {
+        float cx = x0 + (x1 - x0) * 0.5f;
+        float cy = y0 + (y1 - y0) * 0.5f;
+        float radius = (y1 - y0) * 0.5f;
+        
+        dl->PathClear();
+        dl->PathLineTo(ImVec2(cx, y0));
+        dl->PathArcTo(ImVec2(cx, cy), radius, -IM_PI/2.0f, IM_PI/2.0f);
+        dl->PathLineTo(ImVec2(x0, y1));
+        dl->PathLineTo(ImVec2(x0, y0));
+        dl->PathFillConvex(fill);
+        
+        dl->PathClear();
+        dl->PathLineTo(ImVec2(cx, y0));
+        dl->PathArcTo(ImVec2(cx, cy), radius, -IM_PI/2.0f, IM_PI/2.0f);
+        dl->PathLineTo(ImVec2(x0, y1));
+        dl->PathLineTo(ImVec2(x0, y0));
+        dl->PathStroke(border, ImDrawFlags_Closed, thick);
+        break;
+    }
+    case Shape::OrGate: {
+        dl->PathClear();
+        dl->PathLineTo(ImVec2(x0, y0));
+        dl->PathBezierCubicCurveTo(ImVec2(x0 + (x1-x0)*0.5f, y0), ImVec2(x1, y0 + (y1-y0)*0.2f), ImVec2(x1, y0 + (y1-y0)*0.5f));
+        dl->PathBezierCubicCurveTo(ImVec2(x1, y1 - (y1-y0)*0.2f), ImVec2(x0 + (x1-x0)*0.5f, y1), ImVec2(x0, y1));
+        dl->PathBezierCubicCurveTo(ImVec2(x0 + (x1-x0)*0.2f, y1 - (y1-y0)*0.2f), ImVec2(x0 + (x1-x0)*0.2f, y0 + (y1-y0)*0.2f), ImVec2(x0, y0));
+        dl->PathFillConvex(fill);
+        
+        dl->PathClear();
+        dl->PathLineTo(ImVec2(x0, y0));
+        dl->PathBezierCubicCurveTo(ImVec2(x0 + (x1-x0)*0.5f, y0), ImVec2(x1, y0 + (y1-y0)*0.2f), ImVec2(x1, y0 + (y1-y0)*0.5f));
+        dl->PathBezierCubicCurveTo(ImVec2(x1, y1 - (y1-y0)*0.2f), ImVec2(x0 + (x1-x0)*0.5f, y1), ImVec2(x0, y1));
+        dl->PathBezierCubicCurveTo(ImVec2(x0 + (x1-x0)*0.2f, y1 - (y1-y0)*0.2f), ImVec2(x0 + (x1-x0)*0.2f, y0 + (y1-y0)*0.2f), ImVec2(x0, y0));
+        dl->PathStroke(border, ImDrawFlags_Closed, thick);
+        break;
+    }
     }
 
     // --- Label with font scaling (scaled by zoom) ---
@@ -710,12 +768,12 @@ void DrawArchitectureWidget(const CPU& cpu) {
         // Color: Control vs Data distinction
         ImU32 baseCol = (wire.type == WireType::Control) ? Pal::ControlBase : Pal::DataBase;
         ImU32 col; float thick;
-        if (selected)                                                          { col = Pal::WireSelected; thick = 3.5f; }
-        else if (hovered)                                                      { col = Pal::NodeHover;    thick = 3.0f; }
+        if (selected)                                                              { col = Pal::WireSelected; thick = 3.5f; }
+        else if (hovered)                                                          { col = Pal::NodeHover;    thick = 3.0f; }
         else if ((std::string(wire.id) == "IF_Flush" || std::string(wire.id) == "EX_Flush") && active)
-                                                                               { col = Pal::WireFlush;    thick = 2.5f; }
-        else if (active)                                                       { col = Pal::WireActive;   thick = 2.0f; }
-        else                                                                   { col = baseCol;           thick = 1.2f; }
+                                                                                   { col = Pal::WireFlush;    thick = 2.5f; }
+        else if (active)                                                           { col = Pal::WireActive;   thick = 2.0f; }
+        else                                                                       { col = baseCol;           thick = 1.2f; }
 
         // Scale thickness by zoom
         thick *= zoom;
@@ -811,6 +869,25 @@ void DrawArchitectureWidget(const CPU& cpu) {
         dl->AddText(zp, IM_COL32(120,125,140,180), zoomBuf);
     }
 
+#ifdef DEV_MODE
+    // ---- Dev Mode: Live Cursor Coordinates Tooltip ----
+    // Inverse transform: Screen pixels to Normalized Canvas UV
+    float mouseU = (mouse.x - origin.x - scroll.x) / (W * zoom);
+    float mouseV = (mouse.y - origin.y - scroll.y) / (H * zoom);
+
+    // Only display the tooltip if the mouse is hovering the canvas bounds
+    if (canvasHovered && mouseU >= 0.0f && mouseU <= 1.0f && mouseV >= 0.0f && mouseV <= 1.0f) {
+        // Snap the tooltip readout to the nearest 0.005f to match your DragFloat sliders
+        float snappedU = std::round(mouseU * 200.0f) / 200.0f;
+        float snappedV = std::round(mouseV * 200.0f) / 200.0f;
+
+        ImGui::BeginTooltip();
+        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Raw:  (%.4f, %.4f)", mouseU, mouseV);
+        ImGui::TextColored(ImVec4(0.6f, 1.0f, 0.4f, 1.0f), "Snap: (%.3f, %.3f)", snappedU, snappedV);
+        ImGui::EndTooltip();
+    }
+#endif
+
     dl->PopClipRect();
     ImGui::End();
 
@@ -842,10 +919,12 @@ void DrawArchitectureWidget(const CPU& cpu) {
     changed |= ImGui::DragFloat("W", &editNode->w, 0.005f, 0.001f, 0.5f, "%.3f");
     changed |= ImGui::DragFloat("H", &editNode->h, 0.005f, 0.001f, 0.5f, "%.3f");
 
-    ImGui::TextDisabled("Shape: %s",
-        editNode->shape == Shape::Rect ? "Rect" :
-        editNode->shape == Shape::Ellipse ? "Ellipse" :
-        editNode->shape == Shape::Trapezoid ? "Trapezoid" : "Latch");
+    // ---- Live Shape Selector ----
+    const char* shapeNames[] = { "Rect", "Ellipse", "Trapezoid", "Latch", "Capsule", "AndGate", "OrGate", "ALU_Shape" };
+    int currentShape = static_cast<int>(editNode->shape);
+    if (ImGui::Combo("Shape", &currentShape, shapeNames, IM_ARRAYSIZE(shapeNames))) {
+        editNode->shape = static_cast<Shape>(currentShape);
+    }
 
     ImGui::Separator();
 
@@ -860,7 +939,11 @@ void DrawArchitectureWidget(const CPU& cpu) {
                 nd.x, nd.y, nd.w, nd.h,
                 nd.shape == Shape::Rect ? "Rect" :
                 nd.shape == Shape::Ellipse ? "Ellipse" :
-                nd.shape == Shape::Trapezoid ? "Trapezoid" : "Latch",
+                nd.shape == Shape::Trapezoid ? "Trapezoid" :
+                nd.shape == Shape::Capsule ? "Capsule" :
+                nd.shape == Shape::AndGate ? "AndGate" :
+                nd.shape == Shape::OrGate ? "OrGate" :
+                nd.shape == Shape::ALU_Shape ? "ALU_Shape" : "Latch",
                 nd.dataFmt ? "/* dataFmt */" : "nullptr");
         }
         printf("}};\n\n");
@@ -883,7 +966,11 @@ void DrawArchitectureWidget(const CPU& cpu) {
                 nd.id, nd.label, nd.x, nd.y, nd.w, nd.h,
                 nd.shape == Shape::Rect ? "Rect" :
                 nd.shape == Shape::Ellipse ? "Ellipse" :
-                nd.shape == Shape::Trapezoid ? "Trapezoid" : "Latch",
+                nd.shape == Shape::Trapezoid ? "Trapezoid" :
+                nd.shape == Shape::Capsule ? "Capsule" :
+                nd.shape == Shape::AndGate ? "AndGate" :
+                nd.shape == Shape::OrGate ? "OrGate" :
+                nd.shape == Shape::ALU_Shape ? "ALU_Shape" : "Latch",
                 nd.dataFmt ? "/* dataFmt */" : "nullptr");
             out += line;
         }
