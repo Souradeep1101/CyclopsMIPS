@@ -2,6 +2,10 @@
 // UI_ArchitectureWidget.cpp  —  Programmatic Vector MIPS Datapath (Early Branch)
 // Infinite canvas with zoom/pan and dynamic Manhattan wire routing.
 // ---------------------------------------------------------------------------
+
+// Uncomment to enable the blueprint tracing overlay and live node editor.
+#define DEV_MODE
+
 #include "UI_Widgets.h"
 #include <imgui.h>
 #include <cstdio>
@@ -12,6 +16,17 @@
 #include <functional>
 #include <cfloat>
 #include <algorithm>
+
+#ifdef DEV_MODE
+#include "TextureLoader.h"
+#include <imgui_internal.h>
+static GLuint s_blueprintTex = 0;
+static int    s_blueprintW = 0, s_blueprintH = 0;
+static bool   s_blueprintLoaded = false;
+static float  s_blueprintAlpha  = 0.35f;
+static bool   s_showGrid        = true;
+static int    s_selectedNodeIdx  = 0;
+#endif
 
 namespace MIPS::UI {
 
@@ -90,7 +105,12 @@ struct SchematicWire {
 };
 
 // ---- Node Definitions -----------------------------------------------------
+// Under DEV_MODE, kNodes is mutable so sliders can live-edit positions.
+#ifdef DEV_MODE
+static std::array<SchematicNode, 29> kNodes = {{
+#else
 static const std::array<SchematicNode, 29> kNodes = {{
+#endif
     // --- IF Stage ---
     { "Const80000180", "80000180",0.005f, 0.450f, 0.035f, 0.030f, Shape::Rect, nullptr },
     { "ExcMux",   "Mux",     0.045f, 0.380f, 0.022f, 0.120f, Shape::Trapezoid, nullptr },
@@ -138,8 +158,13 @@ static const std::array<SchematicNode, 29> kNodes = {{
     { "WBMux",    "Mux",     0.920f, 0.380f, 0.025f, 0.085f, Shape::Trapezoid, nullptr }
 }};
 
+#ifdef DEV_MODE
+static SchematicNode kFwdUnit =
+    { "FwdUnit", "Forwarding\nUnit", 0.620f, 0.800f, 0.085f, 0.060f, Shape::Rect, nullptr };
+#else
 static const SchematicNode kFwdUnit =
     { "FwdUnit", "Forwarding\nUnit", 0.620f, 0.800f, 0.085f, 0.060f, Shape::Rect, nullptr };
+#endif
 
 // ---- Node Lookup ----------------------------------------------------------
 // Returns pointer to node or nullptr if not found
@@ -609,6 +634,51 @@ void DrawArchitectureWidget(const CPU& cpu) {
         outMax = ImVec2(outMin.x + n.w * W * zoom, outMin.y + n.h * H * zoom);
     };
 
+#ifdef DEV_MODE
+    // ---- Blueprint Background Image ----
+    if (!s_blueprintLoaded) {
+        s_blueprintTex = LoadTextureFromFile("assets/datapath_pipeline.jpg", &s_blueprintW, &s_blueprintH);
+        s_blueprintLoaded = true;
+        if (s_blueprintTex == 0)
+            fprintf(stderr, "[DEV_MODE] Failed to load blueprint image.\n");
+    }
+    if (s_blueprintTex != 0) {
+        ImVec2 imgMin = toScreen(ImVec2(0.0f, 0.0f));
+        ImVec2 imgMax = toScreen(ImVec2(1.0f, 1.0f));
+        ImU32 tint = IM_COL32(255, 255, 255, (int)(s_blueprintAlpha * 255));
+        dl->AddImage((ImTextureID)(intptr_t)s_blueprintTex, imgMin, imgMax,
+                     ImVec2(0,0), ImVec2(1,1), tint);
+    }
+
+    // ---- Dev Grid (2% increments) ----
+    if (s_showGrid) {
+        ImU32 gridCol = IM_COL32(60, 65, 80, 40);
+        ImU32 gridCol5 = IM_COL32(80, 90, 110, 60); // every 10% slightly brighter
+        float step = 0.02f;
+        for (float u = 0.0f; u <= 1.001f; u += step) {
+            bool isMajor = (std::fmod(u + 0.001f, 0.10f) < step);
+            ImU32 c = isMajor ? gridCol5 : gridCol;
+            float th = isMajor ? 1.0f : 0.5f;
+            // Vertical line
+            ImVec2 top = toScreen(ImVec2(u, 0.0f));
+            ImVec2 bot = toScreen(ImVec2(u, 1.0f));
+            dl->AddLine(top, bot, c, th * zoom);
+            // Horizontal line
+            ImVec2 left = toScreen(ImVec2(0.0f, u));
+            ImVec2 right = toScreen(ImVec2(1.0f, u));
+            dl->AddLine(left, right, c, th * zoom);
+        }
+        // Grid coordinate labels (every 10%)
+        ImFont* gFont = ImGui::GetFont();
+        float gFontSize = ImGui::GetFontSize() * 0.6f * zoom;
+        for (float u = 0.0f; u <= 1.001f; u += 0.10f) {
+            char buf[8]; snprintf(buf, sizeof(buf), "%.1f", u);
+            ImVec2 pos = toScreen(ImVec2(u, 0.0f));
+            dl->AddText(gFont, gFontSize, ImVec2(pos.x + 2, pos.y + 2), IM_COL32(100,105,120,120), buf);
+        }
+    }
+#endif
+
     ImFont* font = ImGui::GetFont();
     float baseFontSize = ImGui::GetFontSize();
 
@@ -743,8 +813,101 @@ void DrawArchitectureWidget(const CPU& cpu) {
 
     dl->PopClipRect();
     ImGui::End();
+
+#ifdef DEV_MODE
+    // ---- Dev Mode: Node Editor Panel ----
+    ImGui::Begin("Dev Mode: Node Editor", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+
+    ImGui::TextColored(ImVec4(1,0.85f,0.4f,1), "Blueprint Overlay");
+    ImGui::SliderFloat("Opacity", &s_blueprintAlpha, 0.0f, 1.0f, "%.2f");
+    ImGui::Checkbox("Show Grid", &s_showGrid);
+    ImGui::Separator();
+
+    // Build node name list (kNodes + FwdUnit)
+    constexpr int totalNodes = 30; // 29 + FwdUnit
+    const char* nodeNames[totalNodes];
+    for (int i = 0; i < 29; ++i) nodeNames[i] = kNodes[i].id;
+    nodeNames[29] = kFwdUnit.id;
+
+    ImGui::TextColored(ImVec4(0.4f,0.85f,1,1), "Node Editor");
+    ImGui::Combo("Node", &s_selectedNodeIdx, nodeNames, totalNodes);
+
+    SchematicNode* editNode = (s_selectedNodeIdx < 29)
+                              ? &kNodes[s_selectedNodeIdx]
+                              : &kFwdUnit;
+
+    bool changed = false;
+    changed |= ImGui::DragFloat("X", &editNode->x, 0.005f, 0.0f, 1.0f, "%.3f");
+    changed |= ImGui::DragFloat("Y", &editNode->y, 0.005f, 0.0f, 1.0f, "%.3f");
+    changed |= ImGui::DragFloat("W", &editNode->w, 0.005f, 0.001f, 0.5f, "%.3f");
+    changed |= ImGui::DragFloat("H", &editNode->h, 0.005f, 0.001f, 0.5f, "%.3f");
+
+    ImGui::TextDisabled("Shape: %s",
+        editNode->shape == Shape::Rect ? "Rect" :
+        editNode->shape == Shape::Ellipse ? "Ellipse" :
+        editNode->shape == Shape::Trapezoid ? "Trapezoid" : "Latch");
+
+    ImGui::Separator();
+
+    // Dump formatted C++ array to console
+    if (ImGui::Button("Dump kNodes Array to Console")) {
+        printf("// ---- Auto-generated kNodes (paste into UI_ArchitectureWidget.cpp) ----\n");
+        printf("static const std::array<SchematicNode, 29> kNodes = {{\n");
+        for (int i = 0; i < 29; ++i) {
+            const auto& nd = kNodes[i];
+            printf("    { \"%s\", \"%s\", %.3ff, %.3ff, %.3ff, %.3ff, Shape::%s, %s },\n",
+                nd.id, nd.label,
+                nd.x, nd.y, nd.w, nd.h,
+                nd.shape == Shape::Rect ? "Rect" :
+                nd.shape == Shape::Ellipse ? "Ellipse" :
+                nd.shape == Shape::Trapezoid ? "Trapezoid" : "Latch",
+                nd.dataFmt ? "/* dataFmt */" : "nullptr");
+        }
+        printf("}};\n\n");
+        printf("static const SchematicNode kFwdUnit =\n");
+        printf("    { \"%s\", \"%s\", %.3ff, %.3ff, %.3ff, %.3ff, Shape::Rect, nullptr };\n",
+            kFwdUnit.id, kFwdUnit.label,
+            kFwdUnit.x, kFwdUnit.y, kFwdUnit.w, kFwdUnit.h);
+        printf("// ---- End auto-generated ----\n");
+        fflush(stdout);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Copy to Clipboard")) {
+        std::string out;
+        out += "static const std::array<SchematicNode, 29> kNodes = {{\n";
+        for (int i = 0; i < 29; ++i) {
+            const auto& nd = kNodes[i];
+            char line[256];
+            snprintf(line, sizeof(line),
+                "    { \"%s\", \"%s\", %.3ff, %.3ff, %.3ff, %.3ff, Shape::%s, %s },\n",
+                nd.id, nd.label, nd.x, nd.y, nd.w, nd.h,
+                nd.shape == Shape::Rect ? "Rect" :
+                nd.shape == Shape::Ellipse ? "Ellipse" :
+                nd.shape == Shape::Trapezoid ? "Trapezoid" : "Latch",
+                nd.dataFmt ? "/* dataFmt */" : "nullptr");
+            out += line;
+        }
+        out += "}};\n";
+        char fwd[256];
+        snprintf(fwd, sizeof(fwd),
+            "static const SchematicNode kFwdUnit = { \"%s\", \"%s\", %.3ff, %.3ff, %.3ff, %.3ff, Shape::Rect, nullptr };\n",
+            kFwdUnit.id, kFwdUnit.label, kFwdUnit.x, kFwdUnit.y, kFwdUnit.w, kFwdUnit.h);
+        out += fwd;
+        ImGui::SetClipboardText(out.c_str());
+    }
+
+    ImGui::End();
+#endif
 }
 
-void CleanupArchitectureWidget() {}
+void CleanupArchitectureWidget() {
+#ifdef DEV_MODE
+    if (s_blueprintTex != 0) {
+        UnloadTexture(s_blueprintTex);
+        s_blueprintTex = 0;
+        s_blueprintLoaded = false;
+    }
+#endif
+}
 
 } // namespace MIPS::UI
