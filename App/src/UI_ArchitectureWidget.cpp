@@ -26,6 +26,7 @@ static bool   s_blueprintLoaded = false;
 static float  s_blueprintAlpha  = 0.35f;
 static bool   s_showGrid        = true;
 static int    s_selectedNodeIdx  = 0;
+static int    s_selectedWireIdx  = 0;
 #endif
 
 namespace MIPS::UI {
@@ -246,7 +247,11 @@ static std::vector<ImVec2> ResolveWirePointsUV(const SchematicWire& wire) {
 // ---- Wire Definitions (Port-Anchored) -------------------------------------
 #define A(node, port, off) WireAnchor{node, Port::port, off}
 
+#ifdef DEV_MODE
+static std::vector<SchematicWire> kWires = {
+#else
 static const std::vector<SchematicWire> kWires = {
+#endif
     // =====================================================================
     // IF Stage
     // =====================================================================
@@ -875,20 +880,28 @@ void DrawArchitectureWidget(const CPU& cpu) {
 
 #ifdef DEV_MODE
     // ---- Dev Mode: Live Cursor Coordinates Tooltip ----
-    // Inverse transform: Screen pixels to Normalized Canvas UV
     float mouseU = (mouse.x - origin.x - scroll.x) / (W * zoom);
     float mouseV = (mouse.y - origin.y - scroll.y) / (H * zoom);
 
-    // Only display the tooltip if the mouse is hovering the canvas bounds
     if (canvasHovered && mouseU >= 0.0f && mouseU <= 1.0f && mouseV >= 0.0f && mouseV <= 1.0f) {
-        // Snap the tooltip readout to the nearest 0.005f to match your DragFloat sliders
         float snappedU = std::round(mouseU * 200.0f) / 200.0f;
         float snappedV = std::round(mouseV * 200.0f) / 200.0f;
 
         ImGui::BeginTooltip();
         ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Raw:  (%.4f, %.4f)", mouseU, mouseV);
         ImGui::TextColored(ImVec4(0.6f, 1.0f, 0.4f, 1.0f), "Snap: (%.3f, %.3f)", snappedU, snappedV);
+        ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "[Press F to add Waypoint]");
         ImGui::EndTooltip();
+
+        // F-key: add snapped coordinate as a Custom waypoint to the selected wire
+        if (ImGui::IsKeyPressed(ImGuiKey_F)) {
+            if (s_selectedWireIdx >= 0 && s_selectedWireIdx < (int)kWires.size()) {
+                auto& w = kWires[s_selectedWireIdx];
+                if (w.route == RouteStyle::Custom) {
+                    w.customWaypoints.push_back(ImVec2(snappedU, snappedV));
+                }
+            }
+        }
     }
 #endif
 
@@ -984,6 +997,134 @@ void DrawArchitectureWidget(const CPU& cpu) {
             "static const SchematicNode kFwdUnit = { \"%s\", \"%s\", %.3ff, %.3ff, %.3ff, %.3ff, Shape::Rect, nullptr };\n",
             kFwdUnit.id, kFwdUnit.label, kFwdUnit.x, kFwdUnit.y, kFwdUnit.w, kFwdUnit.h);
         out += fwd;
+        ImGui::SetClipboardText(out.c_str());
+    }
+
+    // ================================================================
+    // Wire Editor (below Node Editor in the same DEV panel)
+    // ================================================================
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f), "Wire Editor");
+
+    // Wire selector combo
+    {
+        int wireCount = (int)kWires.size();
+        // Build names on the fly (small vector, fine for dev tool)
+        std::vector<std::string> wireNameStorage(wireCount);
+        std::vector<const char*> wireNames(wireCount);
+        for (int i = 0; i < wireCount; ++i) {
+            wireNameStorage[i] = std::string(kWires[i].id) + " (" + kWires[i].signalName + ")";
+            wireNames[i] = wireNameStorage[i].c_str();
+        }
+        if (s_selectedWireIdx >= wireCount) s_selectedWireIdx = 0;
+        ImGui::Combo("Wire", &s_selectedWireIdx, wireNames.data(), wireCount);
+    }
+
+    if (s_selectedWireIdx >= 0 && s_selectedWireIdx < (int)kWires.size()) {
+        auto& ew = kWires[s_selectedWireIdx];
+
+        // RouteStyle selector
+        const char* routeNames[] = { "Direct", "L_HV", "L_VH", "Z_HVH", "Z_VHV", "U_Top", "U_Bottom", "Custom" };
+        int curRoute = static_cast<int>(ew.route);
+        if (ImGui::Combo("RouteStyle", &curRoute, routeNames, IM_ARRAYSIZE(routeNames))) {
+            ew.route = static_cast<RouteStyle>(curRoute);
+        }
+
+        // Channel slider (only for styles that use it)
+        if (ew.route == RouteStyle::Z_HVH || ew.route == RouteStyle::Z_VHV ||
+            ew.route == RouteStyle::U_Top || ew.route == RouteStyle::U_Bottom) {
+            ImGui::DragFloat("Channel", &ew.channel, 0.005f, -0.1f, 1.1f, "%.3f");
+        }
+
+        // Source/Dest anchor info (read-only display)
+        ImGui::TextDisabled("Src: %s  Dst: %s", ew.source.nodeId, ew.dest.nodeId);
+
+        // Source/Dest offset sliders
+        ImGui::DragFloat("Src Offset", &ew.source.offset, 0.005f, -0.5f, 0.5f, "%.3f");
+        ImGui::DragFloat("Dst Offset", &ew.dest.offset, 0.005f, -0.5f, 0.5f, "%.3f");
+
+        // Custom Waypoints editor
+        if (ew.route == RouteStyle::Custom) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.8f, 0.9f, 0.4f, 1.0f), "Custom Waypoints (%d):", (int)ew.customWaypoints.size());
+            for (int wi = 0; wi < (int)ew.customWaypoints.size(); ++wi) {
+                ImGui::PushID(wi);
+                char label[32]; snprintf(label, sizeof(label), "WP %d", wi);
+                ImGui::DragFloat2(label, &ew.customWaypoints[wi].x, 0.005f, -0.1f, 1.1f, "%.3f");
+                ImGui::PopID();
+            }
+            if (!ew.customWaypoints.empty()) {
+                if (ImGui::Button("Clear Last WP")) ew.customWaypoints.pop_back();
+                ImGui::SameLine();
+            }
+            if (ImGui::Button("Clear All WPs")) ew.customWaypoints.clear();
+            ImGui::TextDisabled("Hover canvas + press F to append waypoint");
+        }
+    }
+
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // ---- kWires Exporter ----
+    if (ImGui::Button("Copy kWires to Clipboard")) {
+        std::string out;
+        out += "static const std::vector<SchematicWire> kWires = {\n";
+        for (int i = 0; i < (int)kWires.size(); ++i) {
+            const auto& w = kWires[i];
+            // RouteStyle name
+            const char* rsName = "Direct";
+            switch (w.route) {
+                case RouteStyle::Direct:   rsName = "Direct"; break;
+                case RouteStyle::L_HV:     rsName = "L_HV"; break;
+                case RouteStyle::L_VH:     rsName = "L_VH"; break;
+                case RouteStyle::Z_HVH:    rsName = "Z_HVH"; break;
+                case RouteStyle::Z_VHV:    rsName = "Z_VHV"; break;
+                case RouteStyle::U_Top:    rsName = "U_Top"; break;
+                case RouteStyle::U_Bottom: rsName = "U_Bottom"; break;
+                case RouteStyle::Custom:   rsName = "Custom"; break;
+            }
+            // WireType name
+            const char* wtName = (w.type == WireType::Control) ? "Control" : "Data";
+            // Port names helper
+            auto portStr = [](Port p) -> const char* {
+                switch (p) {
+                    case Port::Top:    return "Top";
+                    case Port::Bottom: return "Bottom";
+                    case Port::Left:   return "Left";
+                    case Port::Right:  return "Right";
+                    case Port::Center: return "Center";
+                }
+                return "Center";
+            };
+
+            char line[512];
+            // Build customWaypoints string
+            std::string wpStr = "{}";
+            if (!w.customWaypoints.empty()) {
+                wpStr = "{{ ";
+                for (size_t k = 0; k < w.customWaypoints.size(); ++k) {
+                    char wp[64];
+                    snprintf(wp, sizeof(wp), "{%.3ff,%.3ff}", w.customWaypoints[k].x, w.customWaypoints[k].y);
+                    if (k > 0) wpStr += ", ";
+                    wpStr += wp;
+                }
+                wpStr += " }}";
+            }
+
+            snprintf(line, sizeof(line),
+                "    { \"%s\", \"%s\",\n"
+                "      A(\"%s\", %s, %.3ff), A(\"%s\", %s, %.3ff),\n"
+                "      RouteStyle::%s, %.3ff, %s,\n"
+                "      /* isActive LAMBDA */, nullptr, WireType::%s, %d },\n",
+                w.id, w.signalName,
+                w.source.nodeId, portStr(w.source.port), w.source.offset,
+                w.dest.nodeId, portStr(w.dest.port), w.dest.offset,
+                rsName, w.channel, wpStr.c_str(),
+                wtName, w.bitWidth);
+            out += line;
+        }
+        out += "};\n";
         ImGui::SetClipboardText(out.c_str());
     }
 
