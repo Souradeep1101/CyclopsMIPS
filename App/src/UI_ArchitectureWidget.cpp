@@ -107,63 +107,64 @@ struct SchematicWire {
 // ---- Node Definitions -----------------------------------------------------
 // Under DEV_MODE, kNodes is mutable so sliders can live-edit positions.
 #ifdef DEV_MODE
-static std::array<SchematicNode, 29> kNodes = {{
+static std::array<SchematicNode, 30> kNodes = {{
 #else
-static const std::array<SchematicNode, 29> kNodes = {{
+static const std::array<SchematicNode, 30> kNodes = {{
 #endif
     // --- IF Stage ---
-    { "Const80000180", "80000180",0.005f, 0.450f, 0.035f, 0.030f, Shape::Rect, nullptr },
-    { "ExcMux",   "Mux",     0.045f, 0.380f, 0.022f, 0.120f, Shape::Trapezoid, nullptr },
-    { "PC",       "PC",      0.080f, 0.400f, 0.035f, 0.080f, Shape::Rect,
+    { "Const80000180", "80000180", 0.000f, 0.560f, 0.050f, 0.020f, Shape::Rect, nullptr },
+    { "ExcMux",   "M\nu\nx", 0.085f, 0.520f, 0.020f, 0.115f, Shape::Capsule, nullptr },
+    { "PC",       "PC",      0.115f, 0.540f, 0.020f, 0.070f, Shape::Rect,
       [](const CPU& c) { char b[20]; snprintf(b,sizeof(b),"0x%04X",c.getState().pc); return std::string(b); } },
-    { "InstrMem", "Instruction\nMemory", 0.130f, 0.300f, 0.070f, 0.260f, Shape::Rect, nullptr },
-    { "AddPC4",   "+4",      0.145f, 0.150f, 0.035f, 0.055f, Shape::Rect, nullptr },
-    { "IF_ID",    "IF/ID",   0.220f, 0.040f, 0.014f, 0.850f, Shape::Latch, nullptr },
+    { "InstrMem", "Instruction\nMemory", 0.155f, 0.475f, 0.075f, 0.205f, Shape::Rect, nullptr },
+    { "AddPC4",   "+4",      0.180f, 0.375f, 0.015f, 0.075f, Shape::ALU_Shape, nullptr },
+    { "IF_ID",    "IF/ID",   0.245f, 0.380f, 0.020f, 0.465f, Shape::Latch, nullptr },
 
     // --- ID Stage ---
-    { "HDU",      "Hazard\nDetection",  0.250f, 0.035f, 0.070f, 0.055f, Shape::Rect, nullptr },
-    { "Control",  "Control", 0.260f, 0.180f, 0.050f, 0.080f, Shape::Ellipse, nullptr },
-    { "IDFlushOR","OR",      0.300f, 0.080f, 0.025f, 0.035f, Shape::Ellipse, nullptr },
-    { "CtrlMux",  "Mux",     0.320f, 0.180f, 0.020f, 0.080f, Shape::Trapezoid, nullptr },
-    { "AddBr",    "Add",     0.360f, 0.110f, 0.035f, 0.055f, Shape::Rect, nullptr },
-    { "ShiftL2",  "Shift\nLeft 2", 0.310f, 0.130f, 0.040f, 0.040f, Shape::Rect, nullptr },
-    { "Regs",     "Registers", 0.320f, 0.350f, 0.085f, 0.200f, Shape::Rect,
+    { "HDU",      "Hazard\nDetection", 0.305f, 0.100f, 0.095f, 0.090f, Shape::Capsule, nullptr },
+    { "Control",  "Control", 0.330f, 0.235f, 0.045f, 0.135f, Shape::Ellipse, nullptr },
+    { "IDFlushOR","OR",      0.485f, 0.170f, 0.030f, 0.060f, Shape::OrGate, nullptr },
+    { "CtrlMux",  "M\nu\nx", 0.495f, 0.250f, 0.020f, 0.110f, Shape::Capsule, nullptr },
+    { "AddBr",    "Add",     0.410f, 0.310f, 0.015f, 0.075f, Shape::ALU_Shape, nullptr },
+    { "ShiftL2",  "Shift\nLeft 2", 0.370f, 0.405f, 0.040f, 0.055f, Shape::Ellipse, nullptr },
+    { "Regs",     "Registers", 0.415f, 0.405f, 0.075f, 0.205f, Shape::Rect,
       [](const CPU& c) { if(!c.id_ex.valid) return std::string();
                           char b[40]; snprintf(b,sizeof(b),"Rs:%d Rt:%d",c.id_ex.rs,c.id_ex.rt); return std::string(b); } },
-    { "EqCmp",    "=",       0.415f, 0.400f, 0.025f, 0.045f, Shape::Ellipse, nullptr },
-    { "BranchAND","AND",     0.415f, 0.180f, 0.025f, 0.035f, Shape::Ellipse, nullptr },
-    { "SignExt",  "Sign-\nextend", 0.315f, 0.620f, 0.060f, 0.050f, Shape::Ellipse, nullptr },
-    { "ID_EX",    "ID/EX",   0.460f, 0.040f, 0.014f, 0.850f, Shape::Latch, nullptr },
+    { "EqCmp",    "=",       0.505f, 0.480f, 0.025f, 0.060f, Shape::Ellipse, nullptr },
+    { "BranchAND","AND",     0.450f, 0.080f, 0.025f, 0.035f, Shape::AndGate, nullptr },
+    { "SignExt",  "Sign-\nextend", 0.370f, 0.635f, 0.045f, 0.095f, Shape::Ellipse, nullptr },
+    { "ID_EX",    "ID/EX",   0.550f, 0.235f, 0.020f, 0.610f, Shape::Latch, nullptr },
 
     // --- EX Stage ---
-    { "CauseReg", "Cause",   0.530f, 0.140f, 0.040f, 0.040f, Shape::Rect, nullptr },
-    { "EPCReg",   "EPC",     0.530f, 0.195f, 0.040f, 0.040f, Shape::Rect, nullptr },
-    { "EXFlushMux","Mux",    0.485f, 0.080f, 0.020f, 0.080f, Shape::Trapezoid, nullptr },
-    { "FwdMuxA",  "Mux",     0.510f, 0.360f, 0.025f, 0.085f, Shape::Trapezoid, nullptr },
-    { "FwdMuxB",  "Mux",     0.510f, 0.520f, 0.025f, 0.085f, Shape::Trapezoid, nullptr },
-    { "ALUSrcMux","Mux",     0.565f, 0.470f, 0.025f, 0.085f, Shape::Trapezoid, nullptr },
-    { "ALU",      "ALU",     0.620f, 0.360f, 0.055f, 0.190f, Shape::Trapezoid,
+    { "CauseReg", "Cause",   0.625f, 0.320f, 0.040f, 0.025f, Shape::Rect, nullptr },
+    { "EPCReg",   "EPC",     0.625f, 0.350f, 0.040f, 0.025f, Shape::Rect, nullptr },
+    { "EXFlushMuxWB","M\nu\nx", 0.670f, 0.160f, 0.020f, 0.110f, Shape::Capsule, nullptr },
+    { "EXFlushMuxM", "M\nu\nx", 0.700f, 0.260f, 0.020f, 0.110f, Shape::Capsule, nullptr },
+    { "FwdMuxA",  "M\nu\nx", 0.635f, 0.405f, 0.020f, 0.110f, Shape::Capsule, nullptr },
+    { "FwdMuxB",  "M\nu\nx", 0.635f, 0.550f, 0.020f, 0.110f, Shape::Capsule, nullptr },
+    { "ALUSrcMux","M\nu\nx", 0.635f, 0.745f, 0.020f, 0.110f, Shape::Capsule, nullptr },
+    { "ALU",      "ALU",     0.710f, 0.445f, 0.035f, 0.200f, Shape::ALU_Shape,
       [](const CPU& c) { if(!c.ex_mem.valid) return std::string();
                           char b[20]; snprintf(b,sizeof(b),"0x%X",c.ex_mem.aluResult); return std::string(b); } },
-    { "RegDstMux","Mux",     0.565f, 0.680f, 0.025f, 0.085f, Shape::Trapezoid, nullptr },
-    { "EX_MEM",   "EX/MEM",  0.725f, 0.040f, 0.014f, 0.850f, Shape::Latch, nullptr },
+    { "RegDstMux","M\nu\nx", 0.565f, 0.680f, 0.025f, 0.085f, Shape::Capsule, nullptr },
+    { "EX_MEM",   "EX/MEM",  0.765f, 0.285f, 0.025f, 0.560f, Shape::Latch, nullptr },
 
     // --- MEM Stage ---
-    { "DataMem",  "Data\nMemory", 0.780f, 0.330f, 0.075f, 0.230f, Shape::Rect,
+    { "DataMem",  "Data\nMemory", 0.825f, 0.500f, 0.065f, 0.205f, Shape::Rect,
       [](const CPU& c) { if(!c.mem_wb.valid) return std::string();
                           char b[20]; snprintf(b,sizeof(b),"R:0x%X",c.mem_wb.readData); return std::string(b); } },
-    { "MEM_WB",   "MEM/WB",  0.885f, 0.040f, 0.014f, 0.850f, Shape::Latch, nullptr },
+    { "MEM_WB",   "MEM/WB",  0.910f, 0.335f, 0.020f, 0.510f, Shape::Latch, nullptr },
 
     // --- WB Stage ---
-    { "WBMux",    "Mux",     0.920f, 0.380f, 0.025f, 0.085f, Shape::Trapezoid, nullptr }
+    { "WBMux",    "M\nu\nx", 0.970f, 0.495f, 0.020f, 0.115f, Shape::Capsule, nullptr }
 }};
 
 #ifdef DEV_MODE
 static SchematicNode kFwdUnit =
-    { "FwdUnit", "Forwarding\nUnit", 0.620f, 0.800f, 0.085f, 0.060f, Shape::Rect, nullptr };
+    { "FwdUnit", "Forwarding\nUnit", 0.690f, 0.850f, 0.075f, 0.080f, Shape::Rect, nullptr };
 #else
 static const SchematicNode kFwdUnit =
-    { "FwdUnit", "Forwarding\nUnit", 0.620f, 0.800f, 0.085f, 0.060f, Shape::Rect, nullptr };
+    { "FwdUnit", "Forwarding\nUnit", 0.690f, 0.850f, 0.075f, 0.080f, Shape::Rect, nullptr };
 #endif
 
 // ---- Node Lookup ----------------------------------------------------------
@@ -330,7 +331,10 @@ static const std::vector<SchematicWire> kWires = {
       A("BranchAND", Top, 0), A("IF_ID", Top, 0),
       RouteStyle::U_Top, 0.020f, {}, [](const CPU& c){ return (c.hazardFlags & 0x2) != 0; }, nullptr, WireType::Control, 1 },
     { "EX_Flush", "EX.Flush",
-      A("BranchAND", Top, 0.3f), A("EXFlushMux", Top, 0),
+      A("BranchAND", Top, 0.3f), A("EXFlushMuxWB", Top, 0),
+      RouteStyle::U_Top, 0.025f, {}, [](const CPU& c){ return (c.hazardFlags & 0x4) != 0; }, nullptr, WireType::Control, 1 },
+    { "EX_Flush_M", "EX.Flush",
+      A("BranchAND", Top, 0.3f), A("EXFlushMuxM", Top, 0),
       RouteStyle::U_Top, 0.025f, {}, [](const CPU& c){ return (c.hazardFlags & 0x4) != 0; }, nullptr, WireType::Control, 1 },
 
     // =====================================================================
@@ -770,7 +774,7 @@ void DrawArchitectureWidget(const CPU& cpu) {
         ImU32 col; float thick;
         if (selected)                                                              { col = Pal::WireSelected; thick = 3.5f; }
         else if (hovered)                                                          { col = Pal::NodeHover;    thick = 3.0f; }
-        else if ((std::string(wire.id) == "IF_Flush" || std::string(wire.id) == "EX_Flush") && active)
+        else if ((std::string(wire.id) == "IF_Flush" || std::string(wire.id) == "EX_Flush" || std::string(wire.id) == "EX_Flush_M") && active)
                                                                                    { col = Pal::WireFlush;    thick = 2.5f; }
         else if (active)                                                           { col = Pal::WireActive;   thick = 2.0f; }
         else                                                                       { col = baseCol;           thick = 1.2f; }
@@ -901,15 +905,15 @@ void DrawArchitectureWidget(const CPU& cpu) {
     ImGui::Separator();
 
     // Build node name list (kNodes + FwdUnit)
-    constexpr int totalNodes = 30; // 29 + FwdUnit
+    constexpr int totalNodes = 31; // 30 + FwdUnit
     const char* nodeNames[totalNodes];
-    for (int i = 0; i < 29; ++i) nodeNames[i] = kNodes[i].id;
-    nodeNames[29] = kFwdUnit.id;
+    for (int i = 0; i < 30; ++i) nodeNames[i] = kNodes[i].id;
+    nodeNames[30] = kFwdUnit.id;
 
     ImGui::TextColored(ImVec4(0.4f,0.85f,1,1), "Node Editor");
     ImGui::Combo("Node", &s_selectedNodeIdx, nodeNames, totalNodes);
 
-    SchematicNode* editNode = (s_selectedNodeIdx < 29)
+    SchematicNode* editNode = (s_selectedNodeIdx < 30)
                               ? &kNodes[s_selectedNodeIdx]
                               : &kFwdUnit;
 
@@ -931,8 +935,8 @@ void DrawArchitectureWidget(const CPU& cpu) {
     // Dump formatted C++ array to console
     if (ImGui::Button("Dump kNodes Array to Console")) {
         printf("// ---- Auto-generated kNodes (paste into UI_ArchitectureWidget.cpp) ----\n");
-        printf("static const std::array<SchematicNode, 29> kNodes = {{\n");
-        for (int i = 0; i < 29; ++i) {
+        printf("static const std::array<SchematicNode, 30> kNodes = {{\n");
+        for (int i = 0; i < 30; ++i) {
             const auto& nd = kNodes[i];
             printf("    { \"%s\", \"%s\", %.3ff, %.3ff, %.3ff, %.3ff, Shape::%s, %s },\n",
                 nd.id, nd.label,
@@ -957,8 +961,8 @@ void DrawArchitectureWidget(const CPU& cpu) {
     ImGui::SameLine();
     if (ImGui::Button("Copy to Clipboard")) {
         std::string out;
-        out += "static const std::array<SchematicNode, 29> kNodes = {{\n";
-        for (int i = 0; i < 29; ++i) {
+        out += "static const std::array<SchematicNode, 30> kNodes = {{\n";
+        for (int i = 0; i < 30; ++i) {
             const auto& nd = kNodes[i];
             char line[256];
             snprintf(line, sizeof(line),
