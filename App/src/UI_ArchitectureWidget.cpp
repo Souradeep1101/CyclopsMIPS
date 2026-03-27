@@ -106,7 +106,6 @@ struct SchematicWire {
 };
 
 // ---- Node Definitions -----------------------------------------------------
-// Under DEV_MODE, kNodes is mutable so sliders can live-edit positions.
 #ifdef DEV_MODE
 static std::array<SchematicNode, 30> kNodes = {{
 #else
@@ -169,7 +168,6 @@ static const SchematicNode kFwdUnit =
 #endif
 
 // ---- Node Lookup ----------------------------------------------------------
-// Returns pointer to node or nullptr if not found
 static const SchematicNode* FindNode(const char* id) {
     for (const auto& n : kNodes)
         if (std::string(n.id) == id) return &n;
@@ -178,16 +176,14 @@ static const SchematicNode* FindNode(const char* id) {
 }
 
 // ---- Anchor Resolution ----------------------------------------------------
-// Returns normalised UV coordinate for a port on a node's bounding box.
-// Falls back to (0,0) if node not found.
 static ImVec2 ResolveAnchorUV(const WireAnchor& a) {
     const SchematicNode* n = FindNode(a.nodeId);
-    if (!n) return ImVec2(0, 0); // safe fallback
+    if (!n) return ImVec2(0, 0); 
 
     float x0 = n->x, y0 = n->y;
     float x1 = n->x + n->w, y1 = n->y + n->h;
     float cx = (x0 + x1) * 0.5f, cy = (y0 + y1) * 0.5f;
-    float off = a.offset; // [-0.5, 0.5]
+    float off = a.offset;
 
     switch (a.port) {
     case Port::Left:   return ImVec2(x0, cy + off * (y1 - y0));
@@ -200,7 +196,6 @@ static ImVec2 ResolveAnchorUV(const WireAnchor& a) {
 }
 
 // ---- Manhattan Routing Engine ---------------------------------------------
-// Generates normalised UV waypoints (including src and dst) based on RouteStyle.
 static std::vector<ImVec2> ResolveWirePointsUV(const SchematicWire& wire) {
     ImVec2 src = ResolveAnchorUV(wire.source);
     ImVec2 dst = ResolveAnchorUV(wire.dest);
@@ -222,18 +217,13 @@ static std::vector<ImVec2> ResolveWirePointsUV(const SchematicWire& wire) {
     case RouteStyle::Z_VHV:
         pts = { src, ImVec2(wire.channel, src.y), ImVec2(wire.channel, dst.y), dst };
         break;
-    case RouteStyle::U_Top: {
-        float ch = wire.channel;
-        pts = { src, ImVec2(src.x, ch), ImVec2(dst.x, ch), dst };
-        break;
-    }
+    case RouteStyle::U_Top:
     case RouteStyle::U_Bottom: {
         float ch = wire.channel;
         pts = { src, ImVec2(src.x, ch), ImVec2(dst.x, ch), dst };
         break;
     }
     case RouteStyle::Custom: {
-        // Enforce: always starts at resolved srcAnchor, ends at resolved dstAnchor
         pts.push_back(src);
         for (const auto& wp : wire.customWaypoints)
             pts.push_back(wp);
@@ -271,7 +261,6 @@ static const std::vector<SchematicWire> kWires = {
     // =====================================================================
     // ID Stage: Splitting the Instruction Bus
     // =====================================================================
-    // Trunk channel for instruction split is X = 0.280f
     { "Instr_to_Rs", "Rs",
       A("IF_ID", Right, -0.18f), A("Regs", Left, -0.2f),
       RouteStyle::Z_VHV, 0.280f, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 5 },
@@ -285,7 +274,6 @@ static const std::vector<SchematicWire> kWires = {
       A("IF_ID", Right, -0.3f), A("Control", Left, 0),
       RouteStyle::Z_VHV, 0.280f, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Control, 6 },
 
-    // To HDU (Rs & Rt) - Branches cleanly off the 0.280f trunk
     { "Instr_to_HDU_Rs", "Rs",
       A("IF_ID", Right, -0.18f), A("HDU", Bottom, -0.2f),
       RouteStyle::Custom, 0, { {0.280f, 0.5288f}, {0.280f, 0.220f}, {0.3335f, 0.220f} }, 
@@ -312,13 +300,11 @@ static const std::vector<SchematicWire> kWires = {
       A("Control", Right, -0.2f), A("BranchAND", Left, 0),
       RouteStyle::Z_VHV, 0.410f, {}, [](const CPU& c){ return c.id_ex.branch; }, nullptr, WireType::Control, 1 },
       
-    // PCSrc Loop (Aligned to Top Channel Y = 0.020)
     { "PCSrc_wire", "PCSrc",
       A("BranchAND", Top, -0.2f), A("ExcMux", Top, 0.2f),
       RouteStyle::Custom, 0, { {0.4575f, 0.020f}, {0.099f, 0.020f} },
       [](const CPU& c){ return c.id_ex.valid && c.id_ex.isBranchTaken; }, nullptr, WireType::Control, 1 },
       
-    // Branch Target Loop (Aligned to Under-Top Channel Y = 0.040, and Left Channel X = 0.040)
     { "BrTarget_wire", "Br Target",
       A("AddBr", Left, -0.2f), A("ExcMux", Left, -0.1f), 
       RouteStyle::Custom, 0, { {0.390f, 0.3325f}, {0.390f, 0.040f}, {0.040f, 0.040f}, {0.040f, 0.566f} },
@@ -448,7 +434,7 @@ static const std::vector<SchematicWire> kWires = {
       A("MEM_WB", Right, -0.05f), A("WBMux", Left, -0.15f),
       RouteStyle::Z_VHV, 0.950f, {}, [](const CPU& c){ return c.mem_wb.valid; }, nullptr, WireType::Data, 32 },
       
-    // The Massive Bottom Feedback Loops (Matched to bottom node bounding boxes)
+    // The Massive Bottom Feedback Loops
     { "WB_out", "WB Data",
       A("WBMux", Right, 0), A("Regs", Bottom, 0.2f),
       RouteStyle::Custom, 0, { {1.000f, 0.5525f}, {1.000f, 0.940f}, {0.4675f, 0.940f} },
@@ -620,7 +606,7 @@ static void DrawNodeShape(ImDrawList* dl, const SchematicNode& n,
     }
     }
 
-    // --- Label with font scaling (scaled by zoom) ---
+    // --- Label with font scaling ---
     float nodeW = x1 - x0, nodeH = y1 - y0;
     ImFont* font = ImGui::GetFont();
     float baseFontSize = ImGui::GetFontSize();
@@ -684,14 +670,12 @@ void DrawArchitectureWidget(const CPU& cpu) {
     if (canvasHovered) {
         float wheel = ImGui::GetIO().MouseWheel;
         if (wheel != 0.0f) {
-            // Zoom toward mouse cursor
             ImVec2 mouseRel = ImVec2(mouse.x - origin.x, mouse.y - origin.y);
             float oldZoom = s_canvasZoom;
             s_canvasZoom *= (wheel > 0) ? 1.1f : (1.0f / 1.1f);
             if (s_canvasZoom < kZoomMin) s_canvasZoom = kZoomMin;
             if (s_canvasZoom > kZoomMax) s_canvasZoom = kZoomMax;
             float zoomDelta = s_canvasZoom / oldZoom;
-            // Adjust scroll so the point under mouse stays fixed
             s_canvasScroll.x = mouseRel.x - zoomDelta * (mouseRel.x - s_canvasScroll.x);
             s_canvasScroll.y = mouseRel.y - zoomDelta * (mouseRel.y - s_canvasScroll.y);
         }
@@ -700,7 +684,6 @@ void DrawArchitectureWidget(const CPU& cpu) {
             s_canvasScroll.x += delta.x;
             s_canvasScroll.y += delta.y;
         }
-        // Double-click middle to reset
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Middle)) {
             s_canvasScroll = {0, 0};
             s_canvasZoom = 1.0f;
@@ -714,13 +697,11 @@ void DrawArchitectureWidget(const CPU& cpu) {
     dl->AddRectFilled(origin, ImVec2(origin.x + W, origin.y + H), Pal::Background);
     dl->PushClipRect(origin, ImVec2(origin.x + W, origin.y + H), true);
 
-    // Coordinate transform: normalised UV -> screen
     auto toScreen = [&](ImVec2 uv) -> ImVec2 {
         return ImVec2(origin.x + uv.x * W * zoom + scroll.x,
                       origin.y + uv.y * H * zoom + scroll.y);
     };
 
-    // Node rect in screen space (for hit testing)
     auto nodeScreenRect = [&](const SchematicNode& n, ImVec2& outMin, ImVec2& outMax) {
         outMin = ImVec2(origin.x + n.x * W * zoom + scroll.x,
                         origin.y + n.y * H * zoom + scroll.y);
@@ -743,25 +724,22 @@ void DrawArchitectureWidget(const CPU& cpu) {
                      ImVec2(0,0), ImVec2(1,1), tint);
     }
 
-    // ---- Dev Grid (2% increments) ----
+    // ---- Dev Grid ----
     if (s_showGrid) {
         ImU32 gridCol = IM_COL32(60, 65, 80, 40);
-        ImU32 gridCol5 = IM_COL32(80, 90, 110, 60); // every 10% slightly brighter
+        ImU32 gridCol5 = IM_COL32(80, 90, 110, 60); 
         float step = 0.02f;
         for (float u = 0.0f; u <= 1.001f; u += step) {
             bool isMajor = (std::fmod(u + 0.001f, 0.10f) < step);
             ImU32 c = isMajor ? gridCol5 : gridCol;
             float th = isMajor ? 1.0f : 0.5f;
-            // Vertical line
             ImVec2 top = toScreen(ImVec2(u, 0.0f));
             ImVec2 bot = toScreen(ImVec2(u, 1.0f));
             dl->AddLine(top, bot, c, th * zoom);
-            // Horizontal line
             ImVec2 left = toScreen(ImVec2(0.0f, u));
             ImVec2 right = toScreen(ImVec2(1.0f, u));
             dl->AddLine(left, right, c, th * zoom);
         }
-        // Grid coordinate labels (every 10%)
         ImFont* gFont = ImGui::GetFont();
         float gFontSize = ImGui::GetFontSize() * 0.6f * zoom;
         for (float u = 0.0f; u <= 1.001f; u += 0.10f) {
@@ -775,6 +753,10 @@ void DrawArchitectureWidget(const CPU& cpu) {
     ImFont* font = ImGui::GetFont();
     float baseFontSize = ImGui::GetFontSize();
 
+    // State Tracking for Cross-Highlighting
+    std::string activeHoverSrc, activeHoverDst;
+    std::string activeSelSrc, activeSelDst;
+
     // ---- Phase 1: Wires ----
     const float hoverThresholdSq = 64.0f;
 
@@ -783,14 +765,12 @@ void DrawArchitectureWidget(const CPU& cpu) {
         bool selected = (g_schematicSelection.selectedWireId == wire.id);
         bool hovered = false;
 
-        // Resolve dynamic points
         std::vector<ImVec2> uvPts = ResolveWirePointsUV(wire);
         std::vector<ImVec2> screenPts;
         screenPts.reserve(uvPts.size());
         for (const auto& uv : uvPts)
             screenPts.push_back(toScreen(uv));
 
-        // Hit test
         if (screenPts.size() >= 2) {
             for (size_t i = 0; i + 1 < screenPts.size(); ++i) {
                 if (PointToSegmentDistSq(mouse, screenPts[i], screenPts[i+1]) < hoverThresholdSq) {
@@ -800,7 +780,15 @@ void DrawArchitectureWidget(const CPU& cpu) {
             }
         }
 
-        // Color: Control vs Data distinction
+        if (hovered) {
+            activeHoverSrc = wire.source.nodeId;
+            activeHoverDst = wire.dest.nodeId;
+        }
+        if (selected) {
+            activeSelSrc = wire.source.nodeId;
+            activeSelDst = wire.dest.nodeId;
+        }
+
         ImU32 baseCol = (wire.type == WireType::Control) ? Pal::ControlBase : Pal::DataBase;
         ImU32 col; float thick;
         if (selected)                                                              { col = Pal::WireSelected; thick = 3.5f; }
@@ -810,18 +798,23 @@ void DrawArchitectureWidget(const CPU& cpu) {
         else if (active)                                                           { col = Pal::WireActive;   thick = 2.0f; }
         else                                                                       { col = baseCol;           thick = 1.2f; }
 
-        // Scale thickness by zoom
         thick *= zoom;
 
-        // Draw segments
         if (screenPts.size() >= 2) {
+            // Main Line Segments
             for (size_t i = 0; i + 1 < screenPts.size(); ++i)
                 dl->AddLine(screenPts[i], screenPts[i+1], col, thick);
+            
+            // Internal Path Joints
             for (size_t i = 1; i + 1 < screenPts.size(); ++i)
                 dl->AddCircleFilled(screenPts[i], 3.0f * zoom, col);
+            
+            // Terminal Solder Dots
+            float solderRadius = 4.5f * zoom;
+            dl->AddCircleFilled(screenPts.front(), solderRadius, col);
+            dl->AddCircleFilled(screenPts.back(), solderRadius, col);
         }
 
-        // Signal Name Label on longest segment
         if (wire.signalName && wire.signalName[0] != '\0' && screenPts.size() >= 2) {
             size_t bestSeg = 0;
             float bestLen = 0.0f;
@@ -846,7 +839,6 @@ void DrawArchitectureWidget(const CPU& cpu) {
                               Pal::WireLabelBg, 2.0f * zoom);
             dl->AddText(font, labelFontSize, labelPos, Pal::WireLabelText, wire.signalName);
 
-            // Bit-width indicator
             if (wire.bitWidth > 0) {
                 float slashX = isVertical ? mid.x : mid.x + labelSize.x * 0.5f + 8.0f * zoom;
                 float slashY = isVertical ? mid.y - 8.0f * zoom : mid.y;
@@ -861,7 +853,6 @@ void DrawArchitectureWidget(const CPU& cpu) {
             }
         }
 
-        // Click detection
         if (hovered && ImGui::IsMouseClicked(0)) {
             g_schematicSelection.selectedNodeId.clear();
             g_schematicSelection.selectedWireId = wire.id;
@@ -872,13 +863,20 @@ void DrawArchitectureWidget(const CPU& cpu) {
     auto drawOneNode = [&](const SchematicNode& n) {
         ImVec2 nMin, nMax;
         nodeScreenRect(n, nMin, nMax);
-        bool hovered = canvasHovered && (mouse.x >= nMin.x && mouse.x <= nMax.x && mouse.y >= nMin.y && mouse.y <= nMax.y);
-        bool selected = (g_schematicSelection.selectedNodeId == n.id);
+        
+        bool directHover = canvasHovered && (mouse.x >= nMin.x && mouse.x <= nMax.x && mouse.y >= nMin.y && mouse.y <= nMax.y);
+        bool directSelect = (g_schematicSelection.selectedNodeId == n.id);
+
+        bool isWireHovered = (n.id == activeHoverSrc || n.id == activeHoverDst);
+        bool isWireSelected = (n.id == activeSelSrc || n.id == activeSelDst);
+
+        bool hovered = directHover || isWireHovered;
+        bool selected = directSelect || isWireSelected;
 
         DrawNodeShape(dl, n, origin, W, H, zoom, scroll, hovered, selected);
         DrawNodeData(dl, n, origin, W, H, zoom, scroll, cpu);
 
-        if (hovered && ImGui::IsMouseClicked(0)) {
+        if (directHover && ImGui::IsMouseClicked(0)) {
             g_schematicSelection.selectedWireId.clear();
             g_schematicSelection.selectedNodeId = n.id;
         }
@@ -896,7 +894,7 @@ void DrawArchitectureWidget(const CPU& cpu) {
         dl->AddText(font, stageFontSize, pos, Pal::ControlActive, stageLabels[i]);
     }
 
-    // ---- Zoom indicator (bottom-right) ----
+    // ---- Zoom indicator ----
     {
         char zoomBuf[16]; snprintf(zoomBuf, sizeof(zoomBuf), "%.0f%%", zoom * 100.0f);
         ImVec2 zts = ImGui::CalcTextSize(zoomBuf);
@@ -905,7 +903,6 @@ void DrawArchitectureWidget(const CPU& cpu) {
     }
 
 #ifdef DEV_MODE
-    // ---- Dev Mode: Live Cursor Coordinates Tooltip ----
     float mouseU = (mouse.x - origin.x - scroll.x) / (W * zoom);
     float mouseV = (mouse.y - origin.y - scroll.y) / (H * zoom);
 
@@ -919,7 +916,6 @@ void DrawArchitectureWidget(const CPU& cpu) {
         ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "[Press F to add Waypoint]");
         ImGui::EndTooltip();
 
-        // F-key: add snapped coordinate as a Custom waypoint to the selected wire
         if (ImGui::IsKeyPressed(ImGuiKey_F)) {
             if (s_selectedWireIdx >= 0 && s_selectedWireIdx < (int)kWires.size()) {
                 auto& w = kWires[s_selectedWireIdx];
@@ -935,7 +931,6 @@ void DrawArchitectureWidget(const CPU& cpu) {
     ImGui::End();
 
 #ifdef DEV_MODE
-    // ---- Dev Mode: Node Editor Panel ----
     ImGui::Begin("Dev Mode: Node Editor", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
     ImGui::TextColored(ImVec4(1,0.85f,0.4f,1), "Blueprint Overlay");
@@ -943,8 +938,7 @@ void DrawArchitectureWidget(const CPU& cpu) {
     ImGui::Checkbox("Show Grid", &s_showGrid);
     ImGui::Separator();
 
-    // Build node name list (kNodes + FwdUnit)
-    constexpr int totalNodes = 31; // 30 + FwdUnit
+    constexpr int totalNodes = 31;
     const char* nodeNames[totalNodes];
     for (int i = 0; i < 30; ++i) nodeNames[i] = kNodes[i].id;
     nodeNames[30] = kFwdUnit.id;
@@ -952,9 +946,7 @@ void DrawArchitectureWidget(const CPU& cpu) {
     ImGui::TextColored(ImVec4(0.4f,0.85f,1,1), "Node Editor");
     ImGui::Combo("Node", &s_selectedNodeIdx, nodeNames, totalNodes);
 
-    SchematicNode* editNode = (s_selectedNodeIdx < 30)
-                              ? &kNodes[s_selectedNodeIdx]
-                              : &kFwdUnit;
+    SchematicNode* editNode = (s_selectedNodeIdx < 30) ? &kNodes[s_selectedNodeIdx] : &kFwdUnit;
 
     bool changed = false;
     changed |= ImGui::DragFloat("X", &editNode->x, 0.005f, 0.0f, 1.0f, "%.3f");
@@ -962,7 +954,6 @@ void DrawArchitectureWidget(const CPU& cpu) {
     changed |= ImGui::DragFloat("W", &editNode->w, 0.005f, 0.001f, 0.5f, "%.3f");
     changed |= ImGui::DragFloat("H", &editNode->h, 0.005f, 0.001f, 0.5f, "%.3f");
 
-    // ---- Live Shape Selector ----
     const char* shapeNames[] = { "Rect", "Ellipse", "Trapezoid", "Latch", "Capsule", "AndGate", "OrGate", "ALU_Shape" };
     int currentShape = static_cast<int>(editNode->shape);
     if (ImGui::Combo("Shape", &currentShape, shapeNames, IM_ARRAYSIZE(shapeNames))) {
@@ -971,15 +962,13 @@ void DrawArchitectureWidget(const CPU& cpu) {
 
     ImGui::Separator();
 
-    // Dump formatted C++ array to console
     if (ImGui::Button("Dump kNodes Array to Console")) {
-        printf("// ---- Auto-generated kNodes (paste into UI_ArchitectureWidget.cpp) ----\n");
+        printf("// ---- Auto-generated kNodes ----\n");
         printf("static const std::array<SchematicNode, 30> kNodes = {{\n");
         for (int i = 0; i < 30; ++i) {
             const auto& nd = kNodes[i];
             printf("    { \"%s\", \"%s\", %.3ff, %.3ff, %.3ff, %.3ff, Shape::%s, %s },\n",
-                nd.id, nd.label,
-                nd.x, nd.y, nd.w, nd.h,
+                nd.id, nd.label, nd.x, nd.y, nd.w, nd.h,
                 nd.shape == Shape::Rect ? "Rect" :
                 nd.shape == Shape::Ellipse ? "Ellipse" :
                 nd.shape == Shape::Trapezoid ? "Trapezoid" :
@@ -992,9 +981,7 @@ void DrawArchitectureWidget(const CPU& cpu) {
         printf("}};\n\n");
         printf("static const SchematicNode kFwdUnit =\n");
         printf("    { \"%s\", \"%s\", %.3ff, %.3ff, %.3ff, %.3ff, Shape::Rect, nullptr };\n",
-            kFwdUnit.id, kFwdUnit.label,
-            kFwdUnit.x, kFwdUnit.y, kFwdUnit.w, kFwdUnit.h);
-        printf("// ---- End auto-generated ----\n");
+            kFwdUnit.id, kFwdUnit.label, kFwdUnit.x, kFwdUnit.y, kFwdUnit.w, kFwdUnit.h);
         fflush(stdout);
     }
     ImGui::SameLine();
@@ -1026,17 +1013,12 @@ void DrawArchitectureWidget(const CPU& cpu) {
         ImGui::SetClipboardText(out.c_str());
     }
 
-    // ================================================================
-    // Wire Editor (below Node Editor in the same DEV panel)
-    // ================================================================
     ImGui::Separator();
     ImGui::Spacing();
     ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f), "Wire Editor");
 
-    // Wire selector combo
     {
         int wireCount = (int)kWires.size();
-        // Build names on the fly (small vector, fine for dev tool)
         std::vector<std::string> wireNameStorage(wireCount);
         std::vector<const char*> wireNames(wireCount);
         for (int i = 0; i < wireCount; ++i) {
@@ -1050,27 +1032,21 @@ void DrawArchitectureWidget(const CPU& cpu) {
     if (s_selectedWireIdx >= 0 && s_selectedWireIdx < (int)kWires.size()) {
         auto& ew = kWires[s_selectedWireIdx];
 
-        // RouteStyle selector
         const char* routeNames[] = { "Direct", "L_HV", "L_VH", "Z_HVH", "Z_VHV", "U_Top", "U_Bottom", "Custom" };
         int curRoute = static_cast<int>(ew.route);
         if (ImGui::Combo("RouteStyle", &curRoute, routeNames, IM_ARRAYSIZE(routeNames))) {
             ew.route = static_cast<RouteStyle>(curRoute);
         }
 
-        // Channel slider (only for styles that use it)
         if (ew.route == RouteStyle::Z_HVH || ew.route == RouteStyle::Z_VHV ||
             ew.route == RouteStyle::U_Top || ew.route == RouteStyle::U_Bottom) {
             ImGui::DragFloat("Channel", &ew.channel, 0.005f, -0.1f, 1.1f, "%.3f");
         }
 
-        // Source/Dest anchor info (read-only display)
         ImGui::TextDisabled("Src: %s  Dst: %s", ew.source.nodeId, ew.dest.nodeId);
-
-        // Source/Dest offset sliders
         ImGui::DragFloat("Src Offset", &ew.source.offset, 0.005f, -0.5f, 0.5f, "%.3f");
         ImGui::DragFloat("Dst Offset", &ew.dest.offset, 0.005f, -0.5f, 0.5f, "%.3f");
 
-        // Custom Waypoints editor
         if (ew.route == RouteStyle::Custom) {
             ImGui::Spacing();
             ImGui::TextColored(ImVec4(0.8f, 0.9f, 0.4f, 1.0f), "Custom Waypoints (%d):", (int)ew.customWaypoints.size());
@@ -1092,13 +1068,11 @@ void DrawArchitectureWidget(const CPU& cpu) {
     ImGui::Separator();
     ImGui::Spacing();
 
-    // ---- kWires Exporter ----
     if (ImGui::Button("Copy kWires to Clipboard")) {
         std::string out;
         out += "static const std::vector<SchematicWire> kWires = {\n";
         for (int i = 0; i < (int)kWires.size(); ++i) {
             const auto& w = kWires[i];
-            // RouteStyle name
             const char* rsName = "Direct";
             switch (w.route) {
                 case RouteStyle::Direct:   rsName = "Direct"; break;
@@ -1110,9 +1084,7 @@ void DrawArchitectureWidget(const CPU& cpu) {
                 case RouteStyle::U_Bottom: rsName = "U_Bottom"; break;
                 case RouteStyle::Custom:   rsName = "Custom"; break;
             }
-            // WireType name
             const char* wtName = (w.type == WireType::Control) ? "Control" : "Data";
-            // Port names helper
             auto portStr = [](Port p) -> const char* {
                 switch (p) {
                     case Port::Top:    return "Top";
@@ -1125,7 +1097,6 @@ void DrawArchitectureWidget(const CPU& cpu) {
             };
 
             char line[512];
-            // Build customWaypoints string
             std::string wpStr = "{}";
             if (!w.customWaypoints.empty()) {
                 wpStr = "{{ ";
