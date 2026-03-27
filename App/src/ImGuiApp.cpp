@@ -179,10 +179,10 @@ void ImGuiApp::EmuThreadLoop() {
     // Loop running in background thread
     while (isRunning) {
         if (!isPaused) {
-            emulator->step();
+            (void)emulator->step();
             std::this_thread::sleep_for(std::chrono::milliseconds(16)); // Throttle execution for visualizer
         } else if (stepRequested) {
-            emulator->step();
+            (void)emulator->step();
             stepRequested = false;
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(16)); // Idle poll
@@ -276,7 +276,7 @@ void ImGuiApp::RenderUI() {
     DrawEditorWidget(*emulator, m_textEditor, hasCompiled ? &activeProgram : nullptr);
     
     // Standard Modules
-    DrawMemoryWidget(*bus);
+    DrawMemoryWidget(*bus, *emulator);
     DrawRegisterWidget(*emulator);
     DrawPipelineWidget(*emulator, hasCompiled ? &activeProgram : nullptr);
     DrawSignalsWidget(*emulator);
@@ -309,9 +309,15 @@ void ImGuiApp::RenderUI() {
     
     ImGui::SameLine();
     
-    ImGui::BeginDisabled(!paused); // Only allow step if paused
-    if (ImGui::Button("Step Cycle")) {
+    ImGui::BeginDisabled(!paused); // Only allow step/reset if paused
+    if (ImGui::Button("Step (1 Cycle)")) {
         stepRequested = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reset All")) {
+        emulator->reset();
+        isPaused = true;
+        // The memory already holds the loaded program, so we just reset the CPU state.
     }
     ImGui::EndDisabled();
 

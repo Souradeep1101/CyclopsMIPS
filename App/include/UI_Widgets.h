@@ -21,7 +21,7 @@ extern SchematicSelection g_schematicSelection;
 
 // ---- Widget Draw Functions -----------------------------------------------
 void DrawPipelineWidget(const CPU& cpu, const AssembledProgram* program);
-void DrawMemoryWidget(MemoryBus& bus);
+void DrawMemoryWidget(MemoryBus& bus, const CPU& cpu);
 void DrawRegisterWidget(CPU& cpu);
 void DrawEditorWidget(CPU& cpu, TextEditor& editor, const AssembledProgram* program);
 void DrawArchitectureWidget(const CPU& cpu);

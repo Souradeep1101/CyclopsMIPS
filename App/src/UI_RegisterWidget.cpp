@@ -13,7 +13,12 @@ namespace MIPS::UI {
 
             const auto& state = cpu.getState();
             for (int i = 0; i < 32; ++i) {
+                bool isChanged = (i == (int)state.lastChangedReg);
                 ImGui::TableNextRow();
+                if (isChanged) {
+                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(255, 216, 102, 80));
+                }
+
                 ImGui::TableSetColumnIndex(0);
                 ImGui::Text("R%d", i);
                 

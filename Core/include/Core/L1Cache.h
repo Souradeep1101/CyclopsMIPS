@@ -10,7 +10,7 @@ class L1Cache {
 public:
   // Configurable latency properties
   static constexpr uint32_t CACHE_HIT_CYCLES = 0;
-  static constexpr uint32_t CACHE_MISS_CYCLES = 10;
+  static constexpr uint32_t CACHE_MISS_CYCLES = 0; // Ideal pipeline for education
 
   // Cache architecture: 4KB total size, 16 Byte Lines = 256 Lines
   static constexpr size_t LINE_SIZE = 16;

@@ -3,7 +3,7 @@
 #include <imgui.h>
 
 namespace MIPS::UI {
-    void DrawMemoryWidget(MemoryBus& bus) {
+    void DrawMemoryWidget(MemoryBus& bus, const CPU& cpu) {
         ImGui::Begin("Memory (Data)");
         
         static int memOffset = 0;
@@ -16,10 +16,15 @@ namespace MIPS::UI {
             ImGui::TableHeadersRow();
 
             for (int i = 0; i < 32; ++i) { // Show 32 words
-                uint32_t addr = memOffset + (i * 4);
+                uint32_t addr = (uint32_t)(memOffset + (i * 4));
                 uint32_t val = bus.readWordDirect(addr);
-                
+                bool isChanged = (addr == cpu.getState().lastChangedAddr);
+
                 ImGui::TableNextRow();
+                if (isChanged) {
+                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(255, 216, 102, 80));
+                }
+
                 ImGui::TableSetColumnIndex(0);
                 ImGui::Text("0x%08X", addr);
                 
@@ -29,7 +34,7 @@ namespace MIPS::UI {
                 int value = (int)val;
                 ImGui::InputInt("##val", &value, 0, 0, ImGuiInputTextFlags_CharsHexadecimal);
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
-                    bus.writeWord(addr, (uint32_t)value);
+                    (void)bus.writeWord(addr, (uint32_t)value);
                 }
                 ImGui::PopID();
             }

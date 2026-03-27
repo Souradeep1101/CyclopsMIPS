@@ -44,6 +44,10 @@ std::expected<void, std::string> CPU::step() {
   state.perf.cycles++; // Every call to step() = 1 clock cycle
   mem_wb_old = mem_wb; // Snapshot for pipeline forwarding
 
+  // Clear last-changed tracking at start of cycle
+  state.lastChangedReg = 0xFF;
+  state.lastChangedAddr = 0xFFFFFFFF;
+
   if (stallCycles > 0) {
     stallCycles--;
     state.perf.stallCycles++;
@@ -125,6 +129,8 @@ void CPU::writeBack() {
 
   if (mem_wb.regWrite && mem_wb.destReg != 0) {
     regFile.write(mem_wb.destReg, writeData);
+    state.lastChangedReg = mem_wb.destReg;
+    state.lastChangedCycle = state.perf.cycles;
   }
 }
 
@@ -159,6 +165,8 @@ std::expected<void, std::string> CPU::memoryAccess() {
       stallSource = StallSource::Memory;
       return {}; // Stall request
     }
+    state.lastChangedAddr = ex_mem.aluResult;
+    state.lastChangedCycle = state.perf.cycles;
   }
 
   return {};

@@ -27,6 +27,7 @@ static float  s_blueprintAlpha  = 0.35f;
 static bool   s_showGrid        = true;
 static int    s_selectedNodeIdx  = 0;
 static int    s_selectedWireIdx  = 0;
+static bool   s_devModeUIEnabled = false; // Runtime toggle
 #endif
 
 namespace MIPS::UI {
@@ -697,6 +698,7 @@ void DrawArchitectureWidget(const CPU& cpu) {
     dl->AddRectFilled(origin, ImVec2(origin.x + W, origin.y + H), Pal::Background);
     dl->PushClipRect(origin, ImVec2(origin.x + W, origin.y + H), true);
 
+    // Coordinate transform: normalised UV -> screen
     auto toScreen = [&](ImVec2 uv) -> ImVec2 {
         return ImVec2(origin.x + uv.x * W * zoom + scroll.x,
                       origin.y + uv.y * H * zoom + scroll.y);
@@ -708,24 +710,8 @@ void DrawArchitectureWidget(const CPU& cpu) {
         outMax = ImVec2(outMin.x + n.w * W * zoom, outMin.y + n.h * H * zoom);
     };
 
-#ifdef DEV_MODE
-    // ---- Blueprint Background Image ----
-    if (!s_blueprintLoaded) {
-        s_blueprintTex = LoadTextureFromFile("assets/datapath_pipeline.jpg", &s_blueprintW, &s_blueprintH);
-        s_blueprintLoaded = true;
-        if (s_blueprintTex == 0)
-            fprintf(stderr, "[DEV_MODE] Failed to load blueprint image.\n");
-    }
-    if (s_blueprintTex != 0) {
-        ImVec2 imgMin = toScreen(ImVec2(0.0f, 0.0f));
-        ImVec2 imgMax = toScreen(ImVec2(1.0f, 1.0f));
-        ImU32 tint = IM_COL32(255, 255, 255, (int)(s_blueprintAlpha * 255));
-        dl->AddImage((ImTextureID)(intptr_t)s_blueprintTex, imgMin, imgMax,
-                     ImVec2(0,0), ImVec2(1,1), tint);
-    }
-
-    // ---- Dev Grid ----
-    if (s_showGrid) {
+    // ---- Blueprint Aesthetic: Unconditional Line Grid (2% increments) ----
+    {
         ImU32 gridCol = IM_COL32(60, 65, 80, 40);
         ImU32 gridCol5 = IM_COL32(80, 90, 110, 60); 
         float step = 0.02f;
@@ -740,6 +726,31 @@ void DrawArchitectureWidget(const CPU& cpu) {
             ImVec2 right = toScreen(ImVec2(1.0f, u));
             dl->AddLine(left, right, c, th * zoom);
         }
+    }
+
+#ifdef DEV_MODE
+    // Runtime Toggle Check: Ctrl + Shift + D
+    if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyDown(ImGuiKey_LeftShift) && ImGui::IsKeyPressed(ImGuiKey_D)) {
+        s_devModeUIEnabled = !s_devModeUIEnabled;
+    }
+
+    if (s_devModeUIEnabled) {
+        // ---- Blueprint Background Image ----
+        if (!s_blueprintLoaded) {
+            s_blueprintTex = LoadTextureFromFile("assets/datapath_pipeline.jpg", &s_blueprintW, &s_blueprintH);
+            s_blueprintLoaded = true;
+            if (s_blueprintTex == 0)
+                fprintf(stderr, "[DEV_MODE] Failed to load blueprint image.\n");
+        }
+        if (s_blueprintTex != 0) {
+            ImVec2 imgMin = toScreen(ImVec2(0.0f, 0.0f));
+            ImVec2 imgMax = toScreen(ImVec2(1.0f, 1.0f));
+            ImU32 tint = IM_COL32(255, 255, 255, (int)(s_blueprintAlpha * 255));
+            dl->AddImage((ImTextureID)(intptr_t)s_blueprintTex, imgMin, imgMax,
+                         ImVec2(0,0), ImVec2(1,1), tint);
+        }
+
+        // Grid coordinate labels (only in Dev Mode for calibration)
         ImFont* gFont = ImGui::GetFont();
         float gFontSize = ImGui::GetFontSize() * 0.6f * zoom;
         for (float u = 0.0f; u <= 1.001f; u += 0.10f) {
@@ -903,24 +914,26 @@ void DrawArchitectureWidget(const CPU& cpu) {
     }
 
 #ifdef DEV_MODE
-    float mouseU = (mouse.x - origin.x - scroll.x) / (W * zoom);
-    float mouseV = (mouse.y - origin.y - scroll.y) / (H * zoom);
+    if (s_devModeUIEnabled) {
+        float mouseU = (mouse.x - origin.x - scroll.x) / (W * zoom);
+        float mouseV = (mouse.y - origin.y - scroll.y) / (H * zoom);
 
-    if (canvasHovered && mouseU >= 0.0f && mouseU <= 1.0f && mouseV >= 0.0f && mouseV <= 1.0f) {
-        float snappedU = std::round(mouseU * 200.0f) / 200.0f;
-        float snappedV = std::round(mouseV * 200.0f) / 200.0f;
+        if (canvasHovered && mouseU >= 0.0f && mouseU <= 1.0f && mouseV >= 0.0f && mouseV <= 1.0f) {
+            float snappedU = std::round(mouseU * 200.0f) / 200.0f;
+            float snappedV = std::round(mouseV * 200.0f) / 200.0f;
 
-        ImGui::BeginTooltip();
-        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Raw:  (%.4f, %.4f)", mouseU, mouseV);
-        ImGui::TextColored(ImVec4(0.6f, 1.0f, 0.4f, 1.0f), "Snap: (%.3f, %.3f)", snappedU, snappedV);
-        ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "[Press F to add Waypoint]");
-        ImGui::EndTooltip();
+            ImGui::BeginTooltip();
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Raw:  (%.4f, %.4f)", mouseU, mouseV);
+            ImGui::TextColored(ImVec4(0.6f, 1.0f, 0.4f, 1.0f), "Snap: (%.3f, %.3f)", snappedU, snappedV);
+            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "[Press F to add Waypoint]");
+            ImGui::EndTooltip();
 
-        if (ImGui::IsKeyPressed(ImGuiKey_F)) {
-            if (s_selectedWireIdx >= 0 && s_selectedWireIdx < (int)kWires.size()) {
-                auto& w = kWires[s_selectedWireIdx];
-                if (w.route == RouteStyle::Custom) {
-                    w.customWaypoints.push_back(ImVec2(snappedU, snappedV));
+            if (ImGui::IsKeyPressed(ImGuiKey_F)) {
+                if (s_selectedWireIdx >= 0 && s_selectedWireIdx < (int)kWires.size()) {
+                    auto& w = kWires[s_selectedWireIdx];
+                    if (w.route == RouteStyle::Custom) {
+                        w.customWaypoints.push_back(ImVec2(snappedU, snappedV));
+                    }
                 }
             }
         }
@@ -931,12 +944,13 @@ void DrawArchitectureWidget(const CPU& cpu) {
     ImGui::End();
 
 #ifdef DEV_MODE
-    ImGui::Begin("Dev Mode: Node Editor", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    if (s_devModeUIEnabled) {
+        ImGui::Begin("Dev Mode: Node Editor", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
-    ImGui::TextColored(ImVec4(1,0.85f,0.4f,1), "Blueprint Overlay");
-    ImGui::SliderFloat("Opacity", &s_blueprintAlpha, 0.0f, 1.0f, "%.2f");
-    ImGui::Checkbox("Show Grid", &s_showGrid);
-    ImGui::Separator();
+        ImGui::TextColored(ImVec4(1,0.85f,0.4f,1), "Blueprint Overlay");
+        ImGui::SliderFloat("Opacity", &s_blueprintAlpha, 0.0f, 1.0f, "%.2f");
+        ImGui::Checkbox("Show Grid", &s_showGrid);
+        ImGui::Separator();
 
     constexpr int totalNodes = 31;
     const char* nodeNames[totalNodes];
@@ -1126,6 +1140,7 @@ void DrawArchitectureWidget(const CPU& cpu) {
     }
 
     ImGui::End();
+    }
 #endif
 }
 

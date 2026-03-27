@@ -2,6 +2,7 @@
 #include "Core/CPU.h"
 #include "Assembler/Assembler.h"
 #include <imgui.h>
+#include <deque>
 
 struct PipelineSnapshot {
     uint64_t cycle;
@@ -13,7 +14,7 @@ struct PipelineSnapshot {
     std::string notes;
 };
 
-static std::vector<PipelineSnapshot> history;
+static std::deque<PipelineSnapshot> history;
 static uint64_t last_recorded_cycle = ~(0ULL);
 
 namespace MIPS::UI {
@@ -54,11 +55,14 @@ namespace MIPS::UI {
                  snap.wb_stage = getMnemonic(cpu.mem_wb.pc); // Still retiring, maybe just not writing Reg
             }
 
-            // Simple note generation (e.g. Hazards)
+            // Enhanced Educational Notes (Hazards & Branching)
             if (cpu.hazardFlags & 0x1) {
-                snap.notes = "Stall (Load-Use)";
+                snap.notes = "STALL (Load-Use)";
             } else if (cpu.hazardFlags & 0x2) {
-                snap.notes = "Branch Taken (Flush)";
+                snap.notes = "FLUSH (Mispredict)";
+            } else if (cpu.id_ex.branch && cpu.id_ex.valid) {
+                if (cpu.id_ex.isBranchTaken) snap.notes = "Branch Taken";
+                else snap.notes = "Branch Not Taken";
             }
 
             history.push_back(snap);
@@ -66,7 +70,7 @@ namespace MIPS::UI {
             
             // Limit history size to prevent infinite memory leak during long plays
             if (history.size() > 1000) {
-                // Remove first 500
+                // Remove first 500 (O(1) in deque)
                 history.erase(history.begin(), history.begin() + 500);
             }
         }
