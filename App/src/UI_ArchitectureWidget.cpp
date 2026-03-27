@@ -269,84 +269,104 @@ static const std::vector<SchematicWire> kWires = {
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 32 },
 
     // =====================================================================
-    // ID Stage: Early Branch
+    // ID Stage: Splitting the Instruction Bus
     // =====================================================================
-    { "Reg1_to_EqCmp", "Rs",
+    // To Registers (Rs & Rt)
+    { "Instr_to_Rs", "Rs",
+      A("IF_ID", Right, -0.18f), A("Regs", Left, -0.2f),
+      RouteStyle::Z_VHV, 0.280f, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 5 },
+    { "Instr_to_Rt", "Rt",
+      A("IF_ID", Right, -0.15f), A("Regs", Left, 0.2f),
+      RouteStyle::Z_VHV, 0.280f, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 5 },
+    // To HDU (Rs & Rt)
+    { "Instr_to_HDU_Rs", "Rs",
+      A("IF_ID", Right, -0.18f), A("HDU", Bottom, -0.2f),
+      RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.enableHazardDetection && c.if_id.valid; }, nullptr, WireType::Control, 5 },
+    { "Instr_to_HDU_Rt", "Rt",
+      A("IF_ID", Right, -0.15f), A("HDU", Bottom, 0.2f),
+      RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.enableHazardDetection && c.if_id.valid; }, nullptr, WireType::Control, 5 },
+    // To Sign Extender & Control
+    { "Instr_to_SignExt", "Imm",
+      A("IF_ID", Right, 0.3f), A("SignExt", Left, 0),
+      RouteStyle::Z_VHV, 0.280f, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 16 },
+    { "Instr_to_Control", "Opcode",
+      A("IF_ID", Right, -0.3f), A("Control", Left, 0),
+      RouteStyle::Z_VHV, 0.280f, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Control, 6 },
+
+    // =====================================================================
+    // ID Stage: Early Branch Logic & Comparators
+    // =====================================================================
+    { "Reg1_to_EqCmp", "Rs Data",
       A("Regs", Right, -0.15f), A("EqCmp", Left, -0.2f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 32 },
-    { "Reg2_to_EqCmp", "Rt",
+    { "Reg2_to_EqCmp", "Rt Data",
       A("Regs", Right, 0.25f), A("EqCmp", Left, 0.2f),
       RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 32 },
+    
+    // The newly placed AND Gate routing
     { "EqCmp_to_AND", "Zero",
-      A("EqCmp", Top, 0), A("BranchAND", Bottom, 0.1f),
+      A("EqCmp", Top, 0), A("BranchAND", Bottom, 0.2f),
       RouteStyle::L_VH, 0, {}, [](const CPU& c){ return c.id_ex.valid && c.id_ex.isBranchTaken; }, nullptr, WireType::Control, 1 },
     { "Branch_wire", "Branch",
-      A("Control", Right, 0.1f), A("BranchAND", Left, 0),
-      RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.id_ex.branch; }, nullptr, WireType::Control, 1 },
+      A("Control", Right, -0.2f), A("BranchAND", Left, 0),
+      RouteStyle::L_VH, 0, {}, [](const CPU& c){ return c.id_ex.branch; }, nullptr, WireType::Control, 1 },
+      
+    // The Massive Overhead PCSrc Loop
     { "PCSrc_wire", "PCSrc",
-      A("BranchAND", Right, 0), A("ExcMux", Top, 0.2f),
-      RouteStyle::Custom, 0, {{ {0.450f,0.195f}, {0.450f,0.028f}, {0.038f,0.028f}, {0.038f,0.390f} }},
+      A("BranchAND", Top, -0.2f), A("ExcMux", Top, 0.2f),
+      RouteStyle::Custom, 0, { {0.456f, 0.020f}, {0.095f, 0.020f} },
       [](const CPU& c){ return c.id_ex.valid && c.id_ex.isBranchTaken; }, nullptr, WireType::Control, 1 },
+      
     { "BrTarget_wire", "Br Target",
-      A("AddBr", Right, 0), A("ExcMux", Left, -0.1f),
-      RouteStyle::Custom, 0, {{ {0.405f,0.138f}, {0.405f,0.015f}, {0.025f,0.015f}, {0.025f,0.400f} }},
+      A("AddBr", Left, -0.2f), A("ExcMux", Left, -0.1f), // Pulling from AddBr and wrapping back
+      RouteStyle::Custom, 0, { {0.390f, 0.330f}, {0.390f, 0.040f}, {0.040f, 0.040f}, {0.040f, 0.550f} },
       [](const CPU& c){ return c.id_ex.valid && c.id_ex.isBranchTaken; }, nullptr, WireType::Data, 32 },
+
     { "SignExt_to_SL2", "Imm",
-      A("SignExt", Top, 0.3f), A("ShiftL2", Bottom, 0),
+      A("SignExt", Top, 0.2f), A("ShiftL2", Bottom, 0),
       RouteStyle::L_VH, 0, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 32 },
     { "SL2_to_AddBr", "SL2",
-      A("ShiftL2", Right, 0), A("AddBr", Left, 0.15f),
-      RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 32 },
+      A("ShiftL2", Top, 0), A("AddBr", Bottom, 0),
+      RouteStyle::L_VH, 0, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 32 },
     { "PC4_to_AddBr", "PC+4",
-      A("IF_ID", Right, -0.38f), A("AddBr", Left, -0.15f),
-      RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 32 },
+      A("IF_ID", Right, -0.38f), A("AddBr", Top, -0.2f),
+      RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Data, 32 },
 
     // =====================================================================
-    // ID Stage: Hazard Detection Unit
+    // Hazard Detection & Flushes
     // =====================================================================
-    { "HDU_rs", "IF/ID.Rs",
-      A("IF_ID", Right, -0.18f), A("HDU", Bottom, -0.25f),
-      RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.enableHazardDetection && c.if_id.valid; }, nullptr, WireType::Control, 5 },
-    { "HDU_rt", "IF/ID.Rt",
-      A("IF_ID", Right, -0.15f), A("HDU", Bottom, 0),
-      RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.enableHazardDetection && c.if_id.valid; }, nullptr, WireType::Control, 5 },
     { "HDU_idex_rt", "ID/EX.Rt",
-      A("ID_EX", Right, 0.38f), A("HDU", Right, 0),
-      RouteStyle::Custom, 0, {{ {0.480f,0.730f}, {0.480f,0.055f}, {0.320f,0.055f} }},
-      [](const CPU& c){ return c.enableHazardDetection && c.id_ex.valid; }, nullptr, WireType::Control, 5 },
+      A("ID_EX", Left, 0.38f), A("HDU", Right, 0.2f),
+      RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.enableHazardDetection && c.id_ex.valid; }, nullptr, WireType::Control, 5 },
     { "HDU_memread", "MemRead",
-      A("ID_EX", Right, -0.32f), A("HDU", Top, 0.3f),
-      RouteStyle::Custom, 0, {{ {0.478f,0.170f}, {0.478f,0.045f}, {0.310f,0.045f} }},
-      [](const CPU& c){ return c.enableHazardDetection && c.id_ex.valid && c.id_ex.memRead; }, nullptr, WireType::Control, 1 },
+      A("ID_EX", Left, -0.32f), A("HDU", Right, -0.2f),
+      RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.enableHazardDetection && c.id_ex.valid && c.id_ex.memRead; }, nullptr, WireType::Control, 1 },
     { "HDU_stall", "Stall",
-      A("HDU", Bottom, 0.15f), A("IDFlushOR", Left, 0),
+      A("HDU", Bottom, 0), A("IDFlushOR", Left, 0),
       RouteStyle::L_VH, 0, {}, [](const CPU& c){ return (c.hazardFlags & 0x1) != 0; }, nullptr, WireType::Control, 1 },
     { "HDU_pc_disable", "PCWrite",
-      A("HDU", Left, 0), A("PC", Top, 0),
-      RouteStyle::Custom, 0, {{ {0.240f,0.060f}, {0.240f,0.020f}, {0.080f,0.020f} }},
+      A("HDU", Left, -0.2f), A("PC", Top, -0.2f),
+      RouteStyle::Custom, 0, { {0.290f, 0.120f}, {0.290f, 0.060f}, {0.120f, 0.060f} },
       [](const CPU& c){ return (c.hazardFlags & 0x1) != 0; }, nullptr, WireType::Control, 1 },
 
-    // =====================================================================
-    // Flushes
-    // =====================================================================
     { "ID_Flush_Out", "ID.Flush",
       A("IDFlushOR", Right, 0), A("CtrlMux", Top, 0),
       RouteStyle::L_HV, 0, {}, [](const CPU& c){ return (c.hazardFlags & 0x1) != 0; }, nullptr, WireType::Control, 1 },
     { "IF_Flush", "IF.Flush",
-      A("BranchAND", Top, 0), A("IF_ID", Top, 0),
-      RouteStyle::U_Top, 0.020f, {}, [](const CPU& c){ return (c.hazardFlags & 0x2) != 0; }, nullptr, WireType::Control, 1 },
+      A("BranchAND", Top, 0.2f), A("IF_ID", Top, 0),
+      RouteStyle::U_Top, 0.025f, {}, [](const CPU& c){ return (c.hazardFlags & 0x2) != 0; }, nullptr, WireType::Control, 1 },
     { "EX_Flush", "EX.Flush",
-      A("BranchAND", Top, 0.3f), A("EXFlushMuxWB", Top, 0),
-      RouteStyle::U_Top, 0.025f, {}, [](const CPU& c){ return (c.hazardFlags & 0x4) != 0; }, nullptr, WireType::Control, 1 },
+      A("BranchAND", Top, 0.4f), A("EXFlushMuxWB", Top, 0),
+      RouteStyle::U_Top, 0.030f, {}, [](const CPU& c){ return (c.hazardFlags & 0x4) != 0; }, nullptr, WireType::Control, 1 },
     { "EX_Flush_M", "EX.Flush",
-      A("BranchAND", Top, 0.3f), A("EXFlushMuxM", Top, 0),
-      RouteStyle::U_Top, 0.025f, {}, [](const CPU& c){ return (c.hazardFlags & 0x4) != 0; }, nullptr, WireType::Control, 1 },
+      A("BranchAND", Top, 0.4f), A("EXFlushMuxM", Top, 0),
+      RouteStyle::U_Top, 0.030f, {}, [](const CPU& c){ return (c.hazardFlags & 0x4) != 0; }, nullptr, WireType::Control, 1 },
 
     // =====================================================================
-    // Control Signal Bundles
+    // Control Signal Bundles (Passing through Latches)
     // =====================================================================
     { "Ctrl_to_Mux", "Ctrl",
-      A("Control", Right, 0.15f), A("CtrlMux", Left, 0.15f),
+      A("Control", Right, 0.2f), A("CtrlMux", Left, 0.2f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.if_id.valid; }, nullptr, WireType::Control, 0 },
     { "CtrlWB_to_IDEX", "WB",
       A("CtrlMux", Right, -0.3f), A("ID_EX", Left, -0.38f),
@@ -357,12 +377,16 @@ static const std::vector<SchematicWire> kWires = {
     { "CtrlEX_to_IDEX", "EX",
       A("CtrlMux", Right, 0.1f), A("ID_EX", Left, -0.26f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.id_ex.valid; }, nullptr, WireType::Control, 0 },
+      
     { "WB_IDEX_to_EXMEM", "WB",
       A("ID_EX", Right, -0.42f), A("EX_MEM", Left, -0.42f),
-      RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.ex_mem.valid; }, nullptr, WireType::Control, 0 },
+      RouteStyle::Custom, 0, { {0.590f, 0.120f}, {0.650f, 0.120f}, {0.650f, 0.200f}, {0.740f, 0.200f} }, // Routes through EXFlushMuxWB
+      [](const CPU& c){ return c.ex_mem.valid; }, nullptr, WireType::Control, 0 },
     { "M_IDEX_to_EXMEM", "M",
       A("ID_EX", Right, -0.37f), A("EX_MEM", Left, -0.37f),
-      RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.ex_mem.valid; }, nullptr, WireType::Control, 0 },
+      RouteStyle::Custom, 0, { {0.590f, 0.160f}, {0.680f, 0.160f}, {0.680f, 0.300f}, {0.740f, 0.300f} }, // Routes through EXFlushMuxM
+      [](const CPU& c){ return c.ex_mem.valid; }, nullptr, WireType::Control, 0 },
+      
     { "WB_EXMEM_to_MEMWB", "WB",
       A("EX_MEM", Right, -0.42f), A("MEM_WB", Left, -0.42f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.mem_wb.valid; }, nullptr, WireType::Control, 0 },
@@ -372,31 +396,23 @@ static const std::vector<SchematicWire> kWires = {
     { "WB_to_WBMux", "WB",
       A("MEM_WB", Right, -0.42f), A("WBMux", Top, 0),
       RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.mem_wb.valid && c.mem_wb.regWrite; }, nullptr, WireType::Control, 0 },
-    { "ALUSrc_wire", "ALUSrc",
-      A("ID_EX", Right, -0.26f), A("ALUSrcMux", Top, 0),
-      RouteStyle::Z_VHV, 0.550f, {}, [](const CPU& c){ return c.id_ex.valid && c.id_ex.aluSrc; }, nullptr, WireType::Control, 1 },
 
     // =====================================================================
-    // Data Paths
+    // Data Paths (EX, MEM, WB)
     // =====================================================================
-    { "RegDst_wire", "RegDst",
-      A("ID_EX", Right, -0.26f), A("RegDstMux", Top, 0),
-      RouteStyle::Z_VHV, 0.490f, {}, [](const CPU& c){ return c.id_ex.valid && c.id_ex.regDst; }, nullptr, WireType::Control, 1 },
-    { "DestReg_out", "Dst Reg",
-      A("RegDstMux", Right, 0.15f), A("EX_MEM", Left, 0.35f),
-      RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.id_ex.valid; }, nullptr, WireType::Data, 5 },
     { "RegData1_out", "RdData1",
       A("ID_EX", Right, -0.08f), A("FwdMuxA", Left, 0),
-      RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.id_ex.valid; }, nullptr, WireType::Data, 32 },
+      RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.id_ex.valid; }, nullptr, WireType::Data, 32 },
     { "RegData2_out", "RdData2",
       A("ID_EX", Right, 0.06f), A("FwdMuxB", Left, 0),
-      RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.id_ex.valid; }, nullptr, WireType::Data, 32 },
+      RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.id_ex.valid; }, nullptr, WireType::Data, 32 },
     { "SignExt_out", "Sign-Ext",
       A("SignExt", Right, 0), A("ID_EX", Left, 0.30f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.id_ex.valid; }, nullptr, WireType::Data, 32 },
     { "SignExt_IDEX_out", "Imm",
       A("ID_EX", Right, 0.30f), A("ALUSrcMux", Bottom, 0),
       RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.id_ex.valid && c.id_ex.aluSrc; }, nullptr, WireType::Data, 32 },
+      
     { "MuxA_to_ALU", "Op1",
       A("FwdMuxA", Right, 0), A("ALU", Left, -0.2f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.id_ex.valid; }, nullptr, WireType::Data, 32 },
@@ -406,13 +422,15 @@ static const std::vector<SchematicWire> kWires = {
     { "ALUSrc_to_ALU", "ALU In",
       A("ALUSrcMux", Right, 0), A("ALU", Left, 0.2f),
       RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.id_ex.valid; }, nullptr, WireType::Data, 32 },
+      
     { "ALU_out", "ALU Res",
       A("ALU", Right, 0), A("EX_MEM", Left, 0.05f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.ex_mem.valid; }, nullptr, WireType::Data, 32 },
     { "RegData2_passthru", "Write Data",
       A("FwdMuxB", Right, 0.3f), A("EX_MEM", Left, 0.22f),
-      RouteStyle::Custom, 0, {{ {0.500f,0.620f}, {0.725f,0.620f} }},
+      RouteStyle::Custom, 0, {{ {0.665f, 0.630f}, {0.745f, 0.630f} }},
       [](const CPU& c){ return c.id_ex.valid; }, nullptr, WireType::Data, 32 },
+      
     { "DataMem_out", "Read Data",
       A("DataMem", Right, 0.15f), A("MEM_WB", Left, 0.08f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.mem_wb.valid; }, nullptr, WireType::Data, 32 },
@@ -425,19 +443,21 @@ static const std::vector<SchematicWire> kWires = {
     { "ALU_to_WBMux", "ALU",
       A("MEM_WB", Right, -0.05f), A("WBMux", Left, -0.15f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.mem_wb.valid; }, nullptr, WireType::Data, 32 },
+      
+    // The Massive Bottom Feedback Loops
     { "WB_out", "WB Data",
       A("WBMux", Right, 0), A("Regs", Bottom, 0.2f),
-      RouteStyle::Custom, 0, {{ {0.970f,0.423f}, {0.970f,0.920f}, {0.300f,0.920f}, {0.300f,0.520f} }},
+      RouteStyle::Custom, 0, { {0.995f, 0.550f}, {0.995f, 0.940f}, {0.450f, 0.940f} },
       [](const CPU& c){ return c.mem_wb.valid && c.mem_wb.regWrite; }, nullptr, WireType::Data, 32 },
     { "RegWrite_wire", "RegWrite",
-      A("MEM_WB", Right, -0.42f), A("Regs", Left, -0.15f),
-      RouteStyle::Custom, 0, {{ {0.960f,0.108f}, {0.960f,0.940f}, {0.280f,0.940f}, {0.280f,0.390f} }},
+      A("MEM_WB", Right, -0.42f), A("Regs", Bottom, -0.2f),
+      RouteStyle::Custom, 0, { {0.935f, 0.120f}, {0.950f, 0.120f}, {0.950f, 0.960f}, {0.430f, 0.960f} },
       [](const CPU& c){ return c.mem_wb.valid && c.mem_wb.regWrite; }, nullptr, WireType::Control, 1 },
-    // EX/MEM -> DataMem write data
+      
+    // EX/MEM -> DataMem writes
     { "EXMEM_WriteData", "Wr Data",
       A("EX_MEM", Right, 0.22f), A("DataMem", Left, 0.15f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.ex_mem.valid && c.ex_mem.memWrite; }, nullptr, WireType::Data, 32 },
-    // EX/MEM -> DataMem address (ALU result)
     { "EXMEM_Addr", "Addr",
       A("EX_MEM", Right, 0.05f), A("DataMem", Left, -0.1f),
       RouteStyle::Direct, 0, {}, [](const CPU& c){ return c.ex_mem.valid; }, nullptr, WireType::Data, 32 },
@@ -456,26 +476,27 @@ static const std::vector<SchematicWire> kWires = {
       RouteStyle::L_HV, 0, {}, [](const CPU& c){ return c.enableForwarding && c.ex_mem.valid && c.ex_mem.regWrite && c.ex_mem.destReg != 0; }, nullptr, WireType::Control, 5 },
     { "Fwd_MEM_WB", "MEM/WB.Rd",
       A("MEM_WB", Right, 0.35f), A("FwdUnit", Right, 0.2f),
-      RouteStyle::Custom, 0, {{ {0.910f,0.720f}, {0.910f,0.850f} }},
+      RouteStyle::Custom, 0, { {0.935f, 0.720f}, {0.935f, 0.865f}, {0.770f, 0.865f} },
       [](const CPU& c){ return c.enableForwarding && c.mem_wb.valid && c.mem_wb.regWrite && c.mem_wb.destReg != 0; }, nullptr, WireType::Control, 5 },
+      
     { "FwdUnit_to_MuxA", "FwdA",
       A("FwdUnit", Top, -0.2f), A("FwdMuxA", Bottom, 0),
-      RouteStyle::Custom, 0, {{ {0.640f,0.760f}, {0.500f,0.760f}, {0.500f,0.445f} }},
+      RouteStyle::Custom, 0, { {0.710f, 0.830f}, {0.645f, 0.830f} },
       [](const CPU& c){ return c.forwardA != 0; }, nullptr, WireType::Control, 0 },
     { "FwdUnit_to_MuxB", "FwdB",
       A("FwdUnit", Top, 0.2f), A("FwdMuxB", Bottom, 0),
-      RouteStyle::Custom, 0, {{ {0.680f,0.780f}, {0.490f,0.780f}, {0.490f,0.605f} }},
+      RouteStyle::Custom, 0, { {0.740f, 0.810f}, {0.620f, 0.810f}, {0.620f, 0.665f} },
       [](const CPU& c){ return c.forwardB != 0; }, nullptr, WireType::Control, 0 },
+      
     { "Fwd_EXMEM_data", "EX Fwd",
       A("EX_MEM", Right, 0.05f), A("FwdMuxA", Right, 0),
-      RouteStyle::Custom, 0, {{ {0.745f,0.455f}, {0.745f,0.690f}, {0.500f,0.690f} }},
+      RouteStyle::Custom, 0, { {0.795f, 0.455f}, {0.795f, 0.350f}, {0.665f, 0.350f}, {0.665f, 0.460f} }, // Wraps up and over the ALU
       [](const CPU& c){ return c.forwardA == 2 || c.forwardB == 2; }, nullptr, WireType::Data, 32 },
     { "Fwd_MEMWB_data", "MEM Fwd",
       A("MEM_WB", Right, -0.05f), A("FwdMuxB", Right, 0),
-      RouteStyle::Custom, 0, {{ {0.915f,0.423f}, {0.915f,0.700f}, {0.500f,0.700f} }},
+      RouteStyle::Custom, 0, { {0.935f, 0.423f}, {0.935f, 0.700f}, {0.665f, 0.700f}, {0.665f, 0.605f} }, // Wraps under the DataMem
       [](const CPU& c){ return c.forwardA == 1 || c.forwardB == 1; }, nullptr, WireType::Data, 32 },
 };
-
 #undef A
 
 // ---- Geometry Helpers -----------------------------------------------------
