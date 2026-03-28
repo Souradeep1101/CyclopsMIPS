@@ -42,18 +42,16 @@ namespace MIPS::UI {
             PipelineSnapshot snap;
             snap.cycle = current_cycle;
             
-            snap.if_stage = cpu.if_id.valid ? getMnemonic(cpu.if_id.pc) : "";
+            // FIX 2 (UI Side): Show fetched instruction even if flushed this cycle
+            bool isFlushedThisCycle = (cpu.hazardFlags & 0x2) != 0;
+            snap.if_stage = (cpu.if_id.valid || isFlushedThisCycle) ? getMnemonic(cpu.if_id.pc) : "";
+            
             snap.id_stage = cpu.id_ex.valid ? getMnemonic(cpu.id_ex.pc) : "";
             snap.ex_stage = cpu.ex_mem.valid ? getMnemonic(cpu.ex_mem.pc) : "";
             snap.mem_stage = cpu.mem_wb.valid ? getMnemonic(cpu.mem_wb.pc) : "";
             
-            if (cpu.mem_wb.valid && cpu.mem_wb.regWrite) {
-                // If the instruction in WB stage is writing, get its mnemonic from somewhere...
-                // Wait, mem_wb.pc is tracked precisely for debugging now!
-                snap.wb_stage = getMnemonic(cpu.mem_wb.pc);
-            } else if (cpu.mem_wb.valid) {
-                 snap.wb_stage = getMnemonic(cpu.mem_wb.pc); // Still retiring, maybe just not writing Reg
-            }
+            // FIX 1: WB stage must read from the latch snapshot BEFORE memoryAccess overwrote it
+            snap.wb_stage = cpu.mem_wb_old.valid ? getMnemonic(cpu.mem_wb_old.pc) : "";
 
             // Enhanced Educational Notes (Hazards & Branching)
             if (cpu.hazardFlags & 0x1) {

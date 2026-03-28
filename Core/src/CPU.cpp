@@ -24,6 +24,7 @@ void CPU::reset() {
   pcOverrideValue = 0;
   flushNextFetch = false;
   loadUseHazard = false;
+  hazardFlags = 0;
 
   btb.reset();
   l1i_cache.reset();
@@ -43,6 +44,8 @@ bool CPU::loadProgram(const std::vector<uint32_t> &binary) {
 std::expected<void, std::string> CPU::step() {
   state.perf.cycles++; // Every call to step() = 1 clock cycle
   mem_wb_old = mem_wb; // Snapshot for pipeline forwarding
+
+  hazardFlags = 0; // FIX 3: Clear hazard flags at the start of every cycle!
 
   // Clear last-changed tracking at start of cycle
   state.lastChangedReg = 0xFF;
@@ -261,8 +264,6 @@ std::expected<void, std::string> CPU::decode() {
     state.next_pc = state.pc; 
     loadUseHazard = true;
 
-    // Preserving IF/ID latch is handled by skipping fetch() in step()
-    
     // Insert a bubble into ID_EX
     id_ex.regDst = false;
     id_ex.aluSrc = false;
@@ -284,7 +285,7 @@ std::expected<void, std::string> CPU::decode() {
   id_ex.rd = instr.rd();
   id_ex.shamt = instr.shamt();
 
-  // Read Register File (in a real CPU, this happens concurrently with control logic)
+  // Read Register File
   uint32_t regData1_raw = regFile.read(rs);
   uint32_t regData2_raw = regFile.read(rt);
 
@@ -326,12 +327,10 @@ std::expected<void, std::string> CPU::decode() {
   if (op == static_cast<uint8_t>(OpCode::R_TYPE)) {
     uint8_t funct = instr.funct();
     if (funct == static_cast<uint8_t>(Funct::JR)) {
-      // JR is an unconditional jump, but target is from register.
-      // It's a control hazard.
       pcOverride = true;
       pcOverrideValue = id_ex.regData1;
-      flushNextFetch = true; // Flush IF stage
-      id_ex.valid = false;   // Bubble in EX stage
+      flushNextFetch = true; 
+      id_ex.valid = false;   
       return {};
     }
 
@@ -416,33 +415,26 @@ std::expected<void, std::string> CPU::decode() {
 
     uint32_t target = id_ex.pcPlus4 + (id_ex.signExtImm << 2);
 
-    // Early branch resolution data mapping for the UI
     id_ex.branch = true;
     id_ex.isBranchTaken = shouldBranch;
     id_ex.branchTarget = target;
 
-    // Update BTB
     if (enableBranchPrediction) {
       btb.update(if_id.pc, target, shouldBranch);
     }
 
     if (shouldBranch) {
       if (enableBranchPrediction && if_id.predictedTaken && if_id.predictedTarget == target) {
-        // Correct prediction! No flush.
       } else {
-        // Mispredicted not taken (or wrong target). Flush IF, jump.
         pcOverride = true;
         pcOverrideValue = target;
         flushNextFetch = true;
       }
     } else {
       if (enableBranchPrediction && if_id.predictedTaken) {
-        // Mispredicted taken. Flush IF, resume normal execution.
         pcOverride = true;
         pcOverrideValue = id_ex.pcPlus4;
         flushNextFetch = true;
-      } else {
-        // Correct prediction (Not Taken). No flush.
       }
     }
 
@@ -453,21 +445,18 @@ std::expected<void, std::string> CPU::decode() {
     id_ex.regWrite = false;
     id_ex.memToReg = false;
     id_ex.aluCtrl = ALUControl::NONE;
-    id_ex.valid = true;
+    id_ex.valid = false; // FIX 4: Kills the BEQ/BNE so it doesn't enter EX
 
   } else if (op == static_cast<uint8_t>(OpCode::J) ||
              op == static_cast<uint8_t>(OpCode::JAL)) {
     uint32_t target = (id_ex.pcPlus4 & 0xF0000000) | (instr.target() << 2);
 
-    // Update BTB
     if (enableBranchPrediction) {
       btb.update(if_id.pc, target, true);
     }
 
     if (enableBranchPrediction && if_id.predictedTaken && if_id.predictedTarget == target) {
-      // Correct prediction!
     } else {
-      // Mispredict!
       pcOverride = true;
       pcOverrideValue = target;
       flushNextFetch = true;
@@ -482,14 +471,15 @@ std::expected<void, std::string> CPU::decode() {
       id_ex.regData1 = id_ex.pcPlus4 + 4;
       id_ex.aluSrc = true;
       id_ex.signExtImm = 0;
+      id_ex.valid = true; // JAL must propagate to WB
     } else {
       id_ex.regWrite = false;
       id_ex.aluCtrl = ALUControl::NONE;
+      id_ex.valid = false; // FIX 4: J doesn't do anything else, kill it here
     }
 
     id_ex.memRead = false;
     id_ex.memWrite = false;
-    id_ex.valid = true;
   } else {
     return std::unexpected(std::format("Unknown OpCode: {:#x}", op));
   }
@@ -500,6 +490,7 @@ std::expected<void, std::string> CPU::decode() {
 std::expected<void, std::string> CPU::fetch() {
   // Instruction Fetch
   if (flushNextFetch) {
+    if_id.pc = state.pc; // FIX 2 (Backend): Record what IF was trying to fetch for the UI
     if_id.valid = false;
     state.next_pc = pcOverrideValue;
     flushNextFetch = false;
