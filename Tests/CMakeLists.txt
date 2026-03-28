@@ -22,12 +22,22 @@ add_subdirectory(third_party/benchmark EXCLUDE_FROM_ALL)
 # (googletest and benchmark are not our code; we don't want WX on them)
 
 # -----------------------------------------------------------------------
-# CyclopsTests — Google Test executable
+# CyclopsTests — Google Test Layered Suite (V1.0 Hardening)
 # -----------------------------------------------------------------------
 add_executable(CyclopsTests
+    # Layer 1: Component Unit Tests
+    Test_ALU.cpp
+    Test_RegFile.cpp
+    Test_Instruction.cpp
+    
+    # Layer 2: Pipeline Integration Tests
+    Test_Hazards.cpp
+    
+    # Layer 3: Golden Master (E2E) Tests
+    Test_GoldenMaster.cpp
+
+    # Legacy / Utility
     test_assembler.cpp
-    test_cpu.cpp
-    test_alu.cpp
 )
 
 target_link_libraries(CyclopsTests

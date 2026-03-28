@@ -54,9 +54,19 @@ ALUResult ALU::execute(uint32_t src1, uint32_t src2, ALUControl control,
     break;
 
   case ALUControl::MULT: {
-    uint64_t prod =
-        static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(src1)) *
-                              static_cast<int64_t>(static_cast<int32_t>(src2)));
+    // MIPS MULT: Signed multiplication
+    int64_t op1 = static_cast<int64_t>(static_cast<int32_t>(src1));
+    int64_t op2 = static_cast<int64_t>(static_cast<int32_t>(src2));
+    int64_t prod = op1 * op2;
+    result = static_cast<uint32_t>(prod & 0xFFFFFFFF);
+    hiResult = static_cast<uint32_t>(static_cast<uint64_t>(prod) >> 32);
+    writesHiLo = true;
+    break;
+  }
+
+  case ALUControl::MULTU: {
+    // MIPS MULTU: Unsigned multiplication
+    uint64_t prod = static_cast<uint64_t>(src1) * static_cast<uint64_t>(src2);
     result = static_cast<uint32_t>(prod & 0xFFFFFFFF);
     hiResult = static_cast<uint32_t>(prod >> 32);
     writesHiLo = true;
@@ -65,13 +75,20 @@ ALUResult ALU::execute(uint32_t src1, uint32_t src2, ALUControl control,
 
   case ALUControl::DIV: {
     if (src2 != 0) {
-      result = static_cast<uint32_t>(static_cast<int32_t>(src1) /
-                                     static_cast<int32_t>(src2));
-      hiResult = static_cast<uint32_t>(static_cast<int32_t>(src1) %
-                                       static_cast<int32_t>(src2));
+      result = static_cast<uint32_t>(static_cast<int32_t>(src1) / static_cast<int32_t>(src2));
+      hiResult = static_cast<uint32_t>(static_cast<int32_t>(src1) % static_cast<int32_t>(src2));
     }
     writesHiLo = true;
     break;
+  }
+
+  case ALUControl::DIVU: {
+      if (src2 != 0) {
+          result = src1 / src2;
+          hiResult = src1 % src2;
+      }
+      writesHiLo = true;
+      break;
   }
 
   case ALUControl::SLT:

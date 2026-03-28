@@ -12,12 +12,7 @@ CPU::CPU(MemoryBus& bus_ref)
 }
 
 void CPU::reset() {
-  state.pc = 0;
-  state.next_pc = 0;
-  state.regs.fill(0);
-  state.hi = 0;
-  state.lo = 0;
-  state.perf.reset();
+  state.reset();
 
   stallCycles = 0;
   stallSource = StallSource::None;
