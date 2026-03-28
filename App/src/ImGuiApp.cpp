@@ -1,3 +1,14 @@
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <commdlg.h>
+#endif
+
 #include "ImGuiApp.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -8,8 +19,45 @@
 #include <imgui_impl_opengl3.h>
 #include <print>
 #include "UI_Widgets.h"
+#include "Core/Logger.h"
+#include <fstream>
+#include <sstream>
 
 namespace MIPS::UI {
+
+static std::string OpenFileDialog() {
+    char szFile[260] = { 0 };
+    OPENFILENAMEA ofn = { 0 };
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFile = szFile;
+    ofn.nMaxFile = sizeof(szFile);
+    ofn.lpstrFilter = "MIPS Assembly (*.s;*.asm)\0*.s;*.asm\0All Files (*.*)\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.lpstrFileTitle = NULL;
+    ofn.nMaxFileTitle = 0;
+    ofn.lpstrInitialDir = NULL;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+    if (GetOpenFileNameA(&ofn)) return std::string(szFile);
+    return "";
+}
+
+static std::string SaveFileDialog() {
+    char szFile[260] = { 0 };
+    OPENFILENAMEA ofn = { 0 };
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFile = szFile;
+    ofn.nMaxFile = sizeof(szFile);
+    ofn.lpstrFilter = "MIPS Assembly (*.s)\0*.s\0All Files (*.*)\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.lpstrFileTitle = NULL;
+    ofn.nMaxFileTitle = 0;
+    ofn.lpstrInitialDir = NULL;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+    if (GetSaveFileNameA(&ofn)) return std::string(szFile);
+    return "";
+}
 
 void ApplyEngineeringPrecisionTheme() {
     ImGuiStyle& style = ImGui::GetStyle();
@@ -94,9 +142,9 @@ void ApplyEngineeringPrecisionTheme() {
     style.GrabRounding      = 0.0f;
     style.TabRounding       = 0.0f;
     
-    // Engineering Spacing Specs
-    style.ItemSpacing       = ImVec2(8.0f, 8.0f);
-    style.FramePadding      = ImVec2(14.0f, 6.0f);
+    // Professional Spacing Specs
+    style.ItemSpacing       = ImVec2(10.0f, 10.0f);
+    style.FramePadding      = ImVec2(18.0f, 10.0f);
 }
 
 ImGuiApp::ImGuiApp(CPU& cpu_ref, MemoryBus& bus_ref) 
@@ -155,14 +203,11 @@ bool ImGuiApp::Initialize(int width, int height, const char* title) {
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
     // Setup Typography Hierarchy
-    io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 16.0f); // Default (Inter fallback)
-    ImFont* titleFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeuib.ttf", 20.0f); // Bold Header (Space Grotesk fallback)
-    ImFont* labelFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 14.0f); // Labels
-    ImFont* monoFont  = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consola.ttf", 16.0f); // Monospace Code
+    io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 20.0f); // Default (Inter fallback)
+    ImFont* titleFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeuib.ttf", 24.0f); // Bold Header
+    ImFont* labelFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 18.0f); // Labels
+    ImFont* monoFont  = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consola.ttf", 20.0f); // Monospace Code
     
-    // We can store these globally if needed, or pass them. 
-    // For now, setting the default font handles the body, we will rely on standard sizing for the rest of this pass.
-
     ApplyEngineeringPrecisionTheme();
 
     // Setup Platform/Renderer backends
@@ -176,61 +221,66 @@ bool ImGuiApp::Initialize(int width, int height, const char* title) {
 }
 
 void ImGuiApp::EmuThreadLoop() {
-    // Loop running in background thread
     while (isRunning) {
-        if (!isPaused) {
-            (void)emulator->step();
-            std::this_thread::sleep_for(std::chrono::milliseconds(16)); // Throttle execution for visualizer
-        } else if (stepRequested) {
-            (void)emulator->step();
-            stepRequested = false;
-        } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(16)); // Idle poll
+        if (emulator->waitingForInput) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
         }
+
+        if (isPaused) {
+            if (stepRequested) {
+                (void)emulator->step();
+                stepRequested = false;
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+            continue;
+        }
+
+        // Breakpoint Timing: Check BEFORE step()
+        if (emulator->hasBreakpoint(emulator->getState().pc)) {
+            isPaused = true;
+            Core::Logger::Get().Log(Core::Logger::Channel::Emulation, 
+                std::format("Paused at Breakpoint: 0x{:08X}", emulator->getState().pc));
+            continue;
+        }
+
+        (void)emulator->step();
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 }
 
 static void SetupDefaultLayout(ImGuiID dockspace_id) {
-    ImGui::DockBuilderRemoveNode(dockspace_id); // clear any previous layout
+    ImGui::DockBuilderRemoveNode(dockspace_id);
     ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
 
-    // Root is split horizontally: left (vast majority) and right (Memory/Registers)
     ImGuiID dock_main_id = dockspace_id;
-    ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.20f, nullptr, &dock_main_id);
-    ImGuiID dock_id_left  = dock_main_id; // Left is the remaining 80%
-
-    // Split Right: left (Memory) and right (Registers)
-    ImGuiID dock_id_right_left, dock_id_right_right;
-    ImGui::DockBuilderSplitNode(dock_id_right, ImGuiDir_Right, 0.5f, &dock_id_right_right, &dock_id_right_left);
-
-    // Split Left: top (Code Editor) and bottom (Panels)
-    ImGuiID dock_id_bottom;
-    ImGuiID dock_id_top = ImGui::DockBuilderSplitNode(dock_id_left, ImGuiDir_Up, 0.40f, nullptr, &dock_id_bottom);
-
-    // Split Bottom: left (Controls & Signals) and right (Diagram & Datapath)
-    ImGuiID dock_id_bottom_right;
-    ImGuiID dock_id_bottom_left = ImGui::DockBuilderSplitNode(dock_id_bottom, ImGuiDir_Left, 0.25f, nullptr, &dock_id_bottom_right);
-
-    // Split Bottom Left: top (Controls) and bottom (Signals)
-    ImGuiID dock_id_bl_bottom;
-    ImGuiID dock_id_bl_top = ImGui::DockBuilderSplitNode(dock_id_bottom_left, ImGuiDir_Up, 0.15f, nullptr, &dock_id_bl_bottom);
-
-    // Split Bottom Right: top (Diagram) and bottom (Datapath)
-    ImGuiID dock_id_br_bottom;
-    ImGuiID dock_id_br_top = ImGui::DockBuilderSplitNode(dock_id_bottom_right, ImGuiDir_Up, 0.75f, nullptr, &dock_id_br_bottom);
-
-    // Assign windows to specific docks (Wait! The exact names must match exactly what we have in code!)
-    ImGui::DockBuilderDockWindow("Code Editor & Execution", dock_id_top);
     
-    ImGui::DockBuilderDockWindow("Memory (Data)", dock_id_right_left);
-    ImGui::DockBuilderDockWindow("Registers", dock_id_right_right); // Let's check the code: UI_RegisterWidget.cpp uses "Registers"
+    // 1. Split Bottom (Terminal/Output bar) - 25% of height
+    ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.25f, nullptr, &dock_main_id);
+
+    // 2. Split Right (Inspector/Registers) - 22% of width
+    ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.22f, nullptr, &dock_main_id);
+
+    // 3. Split Center: Editor (Top) vs Visualizers (Bottom)
+    ImGuiID dock_id_editor = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.40f, nullptr, &dock_main_id);
+
+    // 4. Visualizers: Diagram (Top) vs Datapath/Signals (Bottom)
+    ImGuiID dock_id_visualizers_bottom;
+    ImGuiID dock_id_visualizers_top = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.70f, nullptr, &dock_id_visualizers_bottom);
+
+    // --- Assign Windows ---
+    ImGui::DockBuilderDockWindow("Terminal", dock_id_bottom);
     
-    ImGui::DockBuilderDockWindow("Emulator Controls", dock_id_bl_top); // Let's check the code: ImGuiApp.cpp uses "Emulator Controls"
-    ImGui::DockBuilderDockWindow("Pipeline Signals", dock_id_bl_bottom);
+    ImGui::DockBuilderDockWindow("Memory (Data)", dock_id_right);
+    ImGui::DockBuilderDockWindow("Registers", dock_id_right);
     
-    ImGui::DockBuilderDockWindow("MIPS CPU Architecture Diagram", dock_id_br_top);
-    ImGui::DockBuilderDockWindow("Pipeline Datapath", dock_id_br_bottom);
+    ImGui::DockBuilderDockWindow("Code Editor & Execution", dock_id_editor);
+    
+    ImGui::DockBuilderDockWindow("MIPS CPU Architecture Diagram", dock_id_visualizers_top);
+    ImGui::DockBuilderDockWindow("Pipeline Datapath", dock_id_visualizers_bottom);
+    ImGui::DockBuilderDockWindow("Pipeline Signals", dock_id_visualizers_bottom);
 
     ImGui::DockBuilderFinish(dockspace_id);
 }
@@ -246,21 +296,174 @@ void ImGuiApp::RenderUI() {
     bool trigger_reset = false;
 
     // Optional Main Menu Bar for layout reset
+    // Global Navbar & Menu System
     if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("New File", "Ctrl+N")) {
+                m_textEditor.SetText("");
+            }
+            if (ImGui::MenuItem("Open...", "Ctrl+O")) {
+                std::string path = OpenFileDialog();
+                if (!path.empty()) {
+                    std::ifstream t(path);
+                    std::stringstream buffer;
+                    buffer << t.rdbuf();
+                    m_textEditor.SetText(buffer.str());
+                }
+            }
+            if (ImGui::MenuItem("Save", "Ctrl+S")) {
+                std::string path = SaveFileDialog();
+                if (!path.empty()) {
+                    std::ofstream out(path);
+                    out << m_textEditor.GetText();
+                }
+            }
+            ImGui::Separator();
+            if (ImGui::BeginMenu("Export...")) {
+                if (ImGui::MenuItem("Export Memory State (.hex)")) {
+                    std::ofstream out("memory_dump.hex");
+                    for (uint32_t i = 0; i < 0x2000; i += 4) {
+                        out << std::format("0x{:08X}: 0x{:08X}\n", i, bus->readWordDirect(i));
+                    }
+                    Core::Logger::Get().Log(Core::Logger::Channel::Emulation, "Memory exported to memory_dump.hex");
+                }
+                if (ImGui::MenuItem("Export Execution Log (.txt)")) {
+                    std::ofstream out("execution_log.txt");
+                    for (const auto& log : Core::Logger::Get().GetEntries(Core::Logger::Channel::Emulation)) {
+                        out << log << "\n";
+                    }
+                    Core::Logger::Get().Log(Core::Logger::Channel::Emulation, "Log exported to execution_log.txt");
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Exit", "Alt+F4")) { isRunning = false; }
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("View")) {
-            if (ImGui::MenuItem("Reset Layout")) {
-                trigger_reset = true;
+            ImGui::MenuItem("Code Editor", nullptr, &showEditor);
+            ImGui::MenuItem("Architecture Diagram", nullptr, &showArch);
+            ImGui::MenuItem("Memory View", nullptr, &showMemory);
+            ImGui::MenuItem("Registers", nullptr, &showRegisters);
+            ImGui::MenuItem("Pipeline Datapath", nullptr, &showPipeline);
+            ImGui::MenuItem("Control Signals", nullptr, &showSignals);
+            ImGui::MenuItem("Terminal", nullptr, &showTerminal);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Reset Layout")) { trigger_reset = true; }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Run")) {
+            if (ImGui::MenuItem("Compile & Load", "F5")) {
+                std::string payload = m_textEditor.GetText();
+                auto result = MIPS::Assembler::assemble(payload);
+                if (result.has_value()) {
+                    Core::Logger::Get().Log(Core::Logger::Channel::Emulation, "Compilation Successful.");
+                    bus->reset();
+                    emulator->reset();
+                    bus->loadProgram(result.value().machineCode);
+                    activeProgram = result.value();
+                    hasCompiled = true;
+                    isPaused = true;
+                } else {
+                    hasCompiled = false;
+                    Core::Logger::Get().Log(Core::Logger::Channel::Emulation, "Compilation Failed: " + result.error());
+                }
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Play", "F6", !isPaused)) { isPaused = false; }
+            if (ImGui::MenuItem("Pause", "F7", isPaused)) { isPaused = true; }
+            if (ImGui::MenuItem("Step Cycle", "F10")) { stepRequested = true; }
+            if (ImGui::MenuItem("Toggle Breakpoint", "F9")) {
+                // Toggle breakpoint at the active editor line
+                int activeLine = m_textEditor.GetCursorPosition().mLine + 1;
+                if (hasCompiled) {
+                    // Search source map for this line
+                    for (const auto& [pc, meta] : activeProgram.sourceMap) {
+                        if (meta.lineNum == activeLine) {
+                            emulator->toggleBreakpoint(pc);
+                            Core::Logger::Get().Log(Core::Logger::Channel::Emulation, 
+                                std::format("Breakpoint {} at 0x{:08X}", 
+                                emulator->hasBreakpoint(pc) ? "Set" : "Removed", pc));
+                            break;
+                        }
+                    }
+                }
+            }
+            if (ImGui::MenuItem("Reset CPU", "Ctrl+R")) { emulator->reset(); bus->reset(); }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Terminal")) {
+            if (ImGui::MenuItem("New Terminal")) {
+                terminals.push_back({ "CLI " + std::to_string(terminals.size() + 1) });
+                showTerminal = true;
+            }
+            if (ImGui::MenuItem("Clear All Output")) {
+                Core::Logger::Get().GetEntries(Core::Logger::Channel::Console).clear();
+                Core::Logger::Get().GetEntries(Core::Logger::Channel::Emulation).clear();
             }
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Help")) {
+            if (ImGui::MenuItem("MIPS Documentation")) { /* open browser */ }
+            if (ImGui::MenuItem("Cyclops Architecture Guide")) { showArch = true; }
+            ImGui::EndMenu();
+        }
+
+        // --- Right-Aligned Navbar Controls (Professional UX) ---
+        float button_width = 110.0f;
+        float spacing = 8.0f;
+        int num_buttons = 4;
+        float total_width = (button_width * num_buttons) + (spacing * (num_buttons - 1));
+        
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - total_width - 25.0f);
+
+        // 1. Compile
+        if (ImGui::Button("Compile", ImVec2(button_width, 0))) {
+            std::string payload = m_textEditor.GetText();
+            auto result = MIPS::Assembler::assemble(payload);
+            if (result.has_value()) {
+                Core::Logger::Get().Log(Core::Logger::Channel::Emulation, "Compilation Successful.");
+                bus->reset();
+                emulator->reset();
+                bus->loadProgram(result.value().machineCode);
+                activeProgram = result.value();
+                hasCompiled = true;
+                isPaused = true;
+            } else {
+                hasCompiled = false;
+                Core::Logger::Get().Log(Core::Logger::Channel::Emulation, "Compilation Failed: " + result.error());
+            }
+        }
+        
+        ImGui::SameLine(0, spacing);
+        
+        // 2. Play/Pause
+        bool current_paused = isPaused.load();
+        std::string play_label = current_paused ? "Play" : "Pause";
+        if (ImGui::Button(play_label.c_str(), ImVec2(button_width, 0))) {
+            isPaused = !current_paused;
+        }
+
+        ImGui::SameLine(0, spacing);
+
+        // 3. Step
+        if (ImGui::Button("Step", ImVec2(button_width, 0))) {
+            stepRequested = true;
+        }
+
+        ImGui::SameLine(0, spacing);
+
+        // 4. Reset
+        if (ImGui::Button("Reset", ImVec2(button_width, 0))) {
+            emulator->reset();
+            isPaused = true;
+        }
+
         ImGui::EndMainMenuBar();
     }
 
     static bool layout_initialized = false;
-    
-    // Automatically trigger reset if imgui.ini does not exist on first boot
     if (!layout_initialized) {
-        // If the dock node doesn't exist natively, or no ini is present
         if (ImGui::DockBuilderGetNode(dockspace_id) == NULL) {
             trigger_reset = true;
         }
@@ -271,57 +474,16 @@ void ImGuiApp::RenderUI() {
         SetupDefaultLayout(dockspace_id);
     }
 
-    // Draw the new UI Panels
-    DrawArchitectureWidget(*emulator);
-    DrawEditorWidget(*emulator, m_textEditor, hasCompiled ? &activeProgram : nullptr);
-    
-    // Standard Modules
-    DrawMemoryWidget(*bus, *emulator);
-    DrawRegisterWidget(*emulator);
-    DrawPipelineWidget(*emulator, hasCompiled ? &activeProgram : nullptr);
-    DrawSignalsWidget(*emulator);
+    DrawArchitectureWidget(*emulator, &showArch);
+    DrawEditorWidget(*emulator, m_textEditor, hasCompiled ? &activeProgram : nullptr, &showEditor);
+    DrawMemoryWidget(*bus, *emulator, &showMemory);
+    DrawRegisterWidget(*emulator, &showRegisters);
+    DrawPipelineWidget(*emulator, hasCompiled ? &activeProgram : nullptr, &showPipeline);
+    DrawSignalsWidget(*emulator, &showSignals);
 
-    // Emulator Controls
-    ImGui::Begin("Emulator Controls");
-    
-    // Compilation & Hardware Re-initialization
-    if (ImGui::Button("Compile & Load MIPS", ImVec2(-1, 0))) {
-        std::string payload = m_textEditor.GetText();
-        auto result = MIPS::Assembler::assemble(payload);
-        if (result.has_value()) {
-            bus->reset();
-            emulator->reset();
-            bus->loadProgram(result.value().machineCode);
-            activeProgram = result.value();
-            hasCompiled = true;
-            isPaused = true;
-        } else {
-            hasCompiled = false;
-            // TODO: Expose the error trace `result.error()` in UI
-        }
-    }
-    ImGui::Separator();
-
-    bool paused = isPaused.load();
-    if (ImGui::Button(paused ? "Play" : "Pause")) {
-        isPaused = !paused;
-    }
-    
-    ImGui::SameLine();
-    
-    ImGui::BeginDisabled(!paused); // Only allow step/reset if paused
-    if (ImGui::Button("Step (1 Cycle)")) {
-        stepRequested = true;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Reset All")) {
-        emulator->reset();
-        isPaused = true;
-        // The memory already holds the loaded program, so we just reset the CPU state.
-    }
-    ImGui::EndDisabled();
-
-    ImGui::End();
+    bool terminalStep = false;
+    DrawTerminalWidget(&showTerminal, terminals, *emulator, &terminalStep);
+    if (terminalStep) stepRequested = true;
 }
 
 void ImGuiApp::Run() {

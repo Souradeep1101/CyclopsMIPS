@@ -3,6 +3,7 @@
 #include "Core/MemoryBus.h"
 #include "Assembler/Assembler.h"
 #include "TextEditor.h"
+#include "UI_Widgets.h"
 #include <thread>
 #include <atomic>
 
@@ -38,6 +39,19 @@ private:
     TextEditor m_textEditor;
     AssembledProgram activeProgram;
     bool hasCompiled = false;
+    
+    // UI Visibility (View Menu Sync)
+    bool showEditor = true;
+    bool showArch = true;
+    bool showMemory = true;
+    bool showRegisters = true;
+    bool showPipeline = true;
+    bool showSignals = true;
+    bool showTerminal = true;
+    bool showControls = true;
+
+    // Dynamic Terminals
+    std::vector<TerminalInstance> terminals;
 };
 
 } // namespace MIPS::UI

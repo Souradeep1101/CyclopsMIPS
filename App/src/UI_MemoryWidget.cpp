@@ -3,19 +3,23 @@
 #include <imgui.h>
 
 namespace MIPS::UI {
-    void DrawMemoryWidget(MemoryBus& bus, const CPU& cpu) {
-        ImGui::Begin("Memory (Data)");
+    void DrawMemoryWidget(MemoryBus& bus, const CPU& cpu, bool* p_open) {
+        if (!*p_open) return;
+        if (!ImGui::Begin("Memory (Data)", p_open)) {
+            ImGui::End();
+            return;
+        }
         
         static int memOffset = 0;
         ImGui::InputInt("Address Offset", &memOffset, 4, 16, ImGuiInputTextFlags_CharsHexadecimal);
         if (memOffset < 0) memOffset = 0;
 
-        if (ImGui::BeginTable("MemTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
+        if (ImGui::BeginTable("MemTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY)) {
             ImGui::TableSetupColumn("Address");
             ImGui::TableSetupColumn("Value (Hex)");
             ImGui::TableHeadersRow();
 
-            for (int i = 0; i < 32; ++i) { // Show 32 words
+            for (int i = 0; i < 64; ++i) { // Show 64 words for better overview
                 uint32_t addr = (uint32_t)(memOffset + (i * 4));
                 uint32_t val = bus.readWordDirect(addr);
                 bool isChanged = (addr == cpu.getState().lastChangedAddr);

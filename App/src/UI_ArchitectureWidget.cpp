@@ -653,8 +653,20 @@ static void DrawNodeData(ImDrawList* dl, const SchematicNode& n,
 }
 
 // ---- Public API -----------------------------------------------------------
-void DrawArchitectureWidget(const CPU& cpu) {
-    ImGui::Begin("MIPS CPU Architecture Diagram");
+void DrawArchitectureWidget(const CPU& cpu, bool* p_open) {
+    if (!*p_open) return;
+    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("MIPS CPU Architecture Diagram", p_open)) {
+        ImGui::End();
+        return;
+    }
+
+    // Transient Highlight Logic (Architect Note: 3.0s timeout)
+    if (!g_schematicSelection.selectedNodeId.empty() || !g_schematicSelection.selectedWireId.empty()) {
+        if (ImGui::GetTime() - g_schematicSelection.selectionTime > 3.0) {
+            g_schematicSelection.clear();
+        }
+    }
 
     ImVec2 avail = ImGui::GetContentRegionAvail();
     ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -867,6 +879,7 @@ void DrawArchitectureWidget(const CPU& cpu) {
         if (hovered && ImGui::IsMouseClicked(0)) {
             g_schematicSelection.selectedNodeId.clear();
             g_schematicSelection.selectedWireId = wire.id;
+            g_schematicSelection.selectionTime = ImGui::GetTime();
         }
     }
 
@@ -890,6 +903,7 @@ void DrawArchitectureWidget(const CPU& cpu) {
         if (directHover && ImGui::IsMouseClicked(0)) {
             g_schematicSelection.selectedWireId.clear();
             g_schematicSelection.selectedNodeId = n.id;
+            g_schematicSelection.selectionTime = ImGui::GetTime();
         }
     };
 

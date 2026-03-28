@@ -24,6 +24,9 @@ public:
   [[nodiscard]]
   std::expected<void, std::string> writeWord(uint32_t address, uint32_t value);
 
+  // Direct byte access for syscalls/inspections (no alignment check)
+  [[nodiscard]] uint8_t readByteDirect(uint32_t address) const;
+
   // Debug helper: Load a binary blob (like a compiled program) into memory
   bool loadProgram(const std::vector<uint32_t> &program, uint32_t startAddress);
 

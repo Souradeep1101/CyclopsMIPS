@@ -46,7 +46,7 @@ struct ID_EX {
   bool branch = false;
   bool isBranchTaken = false; // Result of branch AND equality
   uint32_t branchTarget = 0;
-
+  bool isSyscall = false;
   bool valid = false;
 };
 

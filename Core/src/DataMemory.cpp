@@ -63,4 +63,9 @@ bool DataMemory::loadProgram(const std::vector<uint32_t> &program,
   return true;
 }
 
+uint8_t DataMemory::readByteDirect(uint32_t address) const {
+  if (address >= (uint32_t)memory.size()) return 0;
+  return memory[address];
+}
+
 } // namespace MIPS

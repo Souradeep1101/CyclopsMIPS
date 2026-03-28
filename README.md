@@ -1,61 +1,45 @@
-# CyclopsMIPS
+# CyclopsMIPS IDE (Version 1.0)
 
-CyclopsMIPS is a cross-platform MIPS IDE and simulator designed for educational purposes. It provides a visual and interactive way for students to understand the inner workings of a MIPS processor, including single-cycle, multi-cycle, and pipelined architectures.
+CyclopsMIPS is a professional, VS Code-inspired MIPS Processor Simulator and Educational IDE. It provides a highly interactive environment for university students to learn Computer Organization through real-time visualization of a 5-stage MIPS pipeline.
 
-## Features
+## Key Features
 
-- **Integrated Assembler**: Write MIPS assembly code and instantly compile it into machine code.
-- **Cycle-Accurate Simulation**: Simulate the execution of MIPS instructions cycle by cycle.
-- **5-Stage Pipeline Visualization**: Real-time monitoring of the IF, ID, EX, MEM, and WB stages.
-- **Hazard Handling**: Visual feedback on data hazards, load-use stalls, and branch flushes.
-- **Register & Memory Inspection**: Live view and modification of the MIPS register file and data memory.
-- **Customizable Layout**: Flexible docking interface powered by Dear ImGui.
-- **Advanced Text Editor**: Syntax highlighting and execution line markers.
+- **Unified Docking Layout**: A programmatic workspace featuring a Code Editor, Architecture Diagram, Pipeline Datapath, and Hardware State panels.
+- **Interactive Schematic**: A zoomable, Manhattan-routed representation of the MIPS Pipeline with transient highlighting (3s) for active signals and nodes.
+- **Multitasking Terminal**: A dynamic tabbed system for:
+    - **Emulation Log**: Real-time diagnostics and hardware events.
+    - **MIPS Console**: Syscall I/O handling (Print String, Read Integer, etc.).
+    - **Spawnable CLI**: Support for multiple dynamic shell instances.
+- **Advanced Debugging**:
+    - **Cycle-Accurate Stepping**: Observe hardware state transitions at the clock-cycle level.
+    - **Breakpoints**: Set breakpoints in the editor; the CPU will halt fetch precisely before the target instruction.
+    - **Transient Highlighting**: Selected wires and nodes in the diagram or signals list remain highlighted for 3 seconds before fading, preventing UI clutter.
+- **Native Project Management**: Use standard Windows 'Open' and 'Save' dialogs to manage `.s` assembly files.
 
-## Architecture
+## Technical Architecture
 
-The project is divided into several core components:
+### Core Emulation
+- **5-Stage Pipeline**: IF, ID, EX, MEM, WB with hazard detection and forwarding.
+- **Syscall Handler**: Supports Syscall 1 (Print Int), 4 (Print String), 5 (Read Int - Blocking), and 10 (Exit).
+- **Thread Safety**: The CPU runs on a dedicated background thread, communicating with the UI via atomic flags and a thread-safe `Logger`.
 
-- **Core Engine**: A high-performance MIPS emulator implementing a 5-stage pipeline with forwarding and hazard detection units.
-- **Assembler**: A custom two-pass assembler that translates MIPS assembly into executable binary.
-- **UI System**: A modular desktop application built using C++, OpenGL3, and Dear ImGui.
+### UI System (Dear ImGui)
+- **Docking**: Utilizes `ImGui::DockBuilder` for a persistent, professional layout.
+- **Theming**: Custom "Engineering Precision" theme with high-contrast semantics for hardware states.
+- **Cross-Panel Sync**: Selecting a signal in the list highlights the wire in the diagram, and vice-versa.
 
-## Development Status
-
-CyclopsMIPS is currently in active development. The core execution engine and basic UI layout are functional. Upcoming features include:
-
-- **Interactive CPU Architecture Diagram**: A detailed, real-time simulation of the datapath following Paterson and Hennessy conventions.
-- **Signal Highlighting**: Bi-directional highlighting between the control path signals and the architecture diagram.
-- **Pipeline Execution Table**: A comprehensive history of instruction flow through the pipeline.
-
-## Prerequisites
-
-To build CyclopsMIPS, you will need:
-
-- C++23 compliant compiler
-- CMake (version 3.21 or higher)
-- GLFW 3.4
+## Build Requirements
+- C++20 Compatible Compiler
+- CMake 3.20+
 - OpenGL 3.3+
+- Windows OS (for native file dialogs)
 
-## Building the Project
+## Getting Started
+1. **Open**: Launch the `CyclopsApp.exe`.
+2. **Write**: Input MIPS assembly in the **Code Editor**.
+3. **Run**: Go to `Run > Compile & Load` (F5).
+4. **Step**: Use `Run > Step Cycle` (F10) to observe the pipeline flow.
+5. **Debug**: Click a line number or use `Run > Toggle Breakpoint` (F9) to set breaks.
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/user/CyclopsMIPS.git
-   cd CyclopsMIPS
-   ```
-
-2. Initialize submodules:
-   ```bash
-   git submodule update --init --recursive
-   ```
-
-3. Build using CMake:
-   ```bash
-   cmake -B build
-   cmake --build build --config Release
-   ```
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+---
+*Created by Antigravity - Advanced Agentic Coding Team*

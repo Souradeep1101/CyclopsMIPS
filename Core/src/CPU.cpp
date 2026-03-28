@@ -1,5 +1,6 @@
 #include "Core/CPU.h"
 #include "Core/OpCode.h"
+#include "Core/Logger.h"
 #include <format>
 
 namespace MIPS {
@@ -91,6 +92,10 @@ std::expected<void, std::string> CPU::step() {
   }
 
   execute();
+  
+  if (id_ex.valid && id_ex.isSyscall) {
+    handleSyscall();
+  }
 
   auto decRes = decode();
   if (!decRes)
@@ -387,7 +392,11 @@ std::expected<void, std::string> CPU::decode() {
       id_ex.aluCtrl = ALUControl::ADD;
       id_ex.regData1 = state.lo;
       id_ex.aluSrc = true;
+      id_ex.aluSrc = true;
       id_ex.signExtImm = 0;
+    } else if (funct == static_cast<uint8_t>(Funct::SYSCALL)) {
+      id_ex.isSyscall = true;
+      id_ex.valid = true;
     } else {
       return std::unexpected(std::format("Unknown R-Type Funct: {:#x}", funct));
     }
@@ -528,6 +537,43 @@ std::expected<void, std::string> CPU::fetch() {
   }
 
   return {};
+}
+
+void CPU::handleSyscall() {
+    uint32_t v0 = regFile.read(2); // $v0
+    switch (v0) {
+        case 1: // Print Integer
+            Core::Logger::Get().Log(Core::Logger::Channel::Console, 
+                std::format("{}", (int)regFile.read(4))); // $a0
+            break;
+        case 4: { // Print String
+            uint32_t addr = regFile.read(4);
+            std::string s;
+            char c;
+            while ((c = (char)bus.readByteDirect(addr++)) != '\0') s += c;
+            Core::Logger::Get().Log(Core::Logger::Channel::Console, s);
+            break;
+        }
+        case 5: // Read Integer (Blocking)
+            waitingForInput = true;
+            // The UI will set inputBuffer and clear waitingForInput.
+            // In a real MIPS this would be a blocking pause. 
+            // Our EmuThread yields when waitingForInput is true.
+            break;
+        case 10: // Exit
+            Core::Logger::Get().Log(Core::Logger::Channel::Emulation, "Program exited via Syscall 10.");
+            // We could set a 'halted' flag here
+            break;
+    }
+}
+
+void CPU::toggleBreakpoint(uint32_t pc) {
+    if (breakpoints.count(pc)) breakpoints.erase(pc);
+    else breakpoints.insert(pc);
+}
+
+bool CPU::hasBreakpoint(uint32_t pc) const {
+    return breakpoints.count(pc) != 0;
 }
 
 } // namespace MIPS

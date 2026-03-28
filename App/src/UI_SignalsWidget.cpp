@@ -2,11 +2,24 @@
 #include <imgui.h>
 #include <cstdio>
 #include <string>
+#include <vector>
+#include <unordered_map>
 
 namespace MIPS::UI {
 
-void DrawSignalsWidget(const CPU& cpu) {
-    ImGui::Begin("Pipeline Signals");
+void DrawSignalsWidget(const CPU& cpu, bool* p_open) {
+    if (!*p_open) return;
+    if (!ImGui::Begin("Pipeline Signals", p_open)) {
+        ImGui::End();
+        return;
+    }
+
+    // Transient Highlight Logic (Architect Note: 3.0s timeout)
+    if (!g_schematicSelection.selectedNodeId.empty() || !g_schematicSelection.selectedWireId.empty()) {
+        if (ImGui::GetTime() - g_schematicSelection.selectionTime > 3.0) {
+            g_schematicSelection.clear();
+        }
+    }
 
     if (ImGui::BeginTable("SigTable", 2,
             ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
@@ -90,8 +103,10 @@ void DrawSignalsWidget(const CPU& cpu) {
 
             if (ImGui::IsItemClicked()) {
                 g_schematicSelection.selectedNodeId.clear();
-                if (r.wireId[0] != '\0') 
+                if (r.wireId[0] != '\0') {
                     g_schematicSelection.selectedWireId = r.wireId;
+                    g_schematicSelection.selectionTime = ImGui::GetTime();
+                }
             }
         }
 

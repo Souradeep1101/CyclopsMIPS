@@ -18,11 +18,13 @@ static std::deque<PipelineSnapshot> history;
 static uint64_t last_recorded_cycle = ~(0ULL);
 
 namespace MIPS::UI {
-    void DrawPipelineWidget(const CPU& cpu, const AssembledProgram* program) {
-        ImGui::Begin("Pipeline Datapath");
-        
-        const auto& state = cpu.getState();
-        uint64_t current_cycle = state.perf.cycles;
+    void DrawPipelineWidget(const CPU& cpu, const AssembledProgram* program, bool* p_open) {
+        if (!*p_open) return;
+        if (!ImGui::Begin("Pipeline Datapath", p_open)) {
+            ImGui::End();
+            return;
+        }
+        uint64_t current_cycle = cpu.getState().perf.cycles;
 
         // Reset history if CPU was reset or we travel back in time
         if (current_cycle < last_recorded_cycle && current_cycle == 0) {

@@ -9,6 +9,7 @@ add_executable(CyclopsApp
     src/UI_SignalsWidget.cpp
     src/TextEditor.cpp
     src/TextureLoader.cpp
+    src/UI_TerminalWidget.cpp
 )
 
 # Post-build: copy assets directory next to the executable
