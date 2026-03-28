@@ -42,12 +42,12 @@ constexpr float kZoomMax = 4.0f;
 
 // ---- Palette --------------------------------------------------------------
 namespace Pal {
-    constexpr ImU32 NodeFill       = IM_COL32(30,  32,  40, 255);
-    constexpr ImU32 NodeBorder     = IM_COL32(90,  95, 110, 255);
+    constexpr ImU32 NodeFill       = IM_COL32(42,  45,  57, 255);
+    constexpr ImU32 NodeBorder     = IM_COL32(110, 115, 130, 255);
     constexpr ImU32 NodeHover      = IM_COL32(68, 216, 241, 255);
     constexpr ImU32 NodeSelected   = IM_COL32(120, 220, 119, 255);
-    constexpr ImU32 LatchFill      = IM_COL32(22,  24,  30, 255);
-    constexpr ImU32 LatchBorder    = IM_COL32(60,  65,  80, 255);
+    constexpr ImU32 LatchFill      = IM_COL32(32,  34,  40, 255);
+    constexpr ImU32 LatchBorder    = IM_COL32(80,  85,  100, 255);
     constexpr ImU32 LabelColor     = IM_COL32(210, 212, 220, 255);
     constexpr ImU32 DataColor      = IM_COL32(255, 215, 153, 255);
     constexpr ImU32 WireInactive   = IM_COL32(55,  58,  70, 200);
@@ -661,12 +661,7 @@ void DrawArchitectureWidget(const CPU& cpu, bool* p_open) {
         return;
     }
 
-    // Transient Highlight Logic (Architect Note: 3.0s timeout)
-    if (!g_schematicSelection.selectedNodeId.empty() || !g_schematicSelection.selectedWireId.empty()) {
-        if (ImGui::GetTime() - g_schematicSelection.selectionTime > 3.0) {
-            g_schematicSelection.clear();
-        }
-    }
+    // Transient Highlight Logic (Architect Note: Evaluated in ImGuiApp loop for global sync)
 
     ImVec2 avail = ImGui::GetContentRegionAvail();
     ImVec2 origin = ImGui::GetCursorScreenPos();

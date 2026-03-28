@@ -14,12 +14,7 @@ void DrawSignalsWidget(const CPU& cpu, bool* p_open) {
         return;
     }
 
-    // Transient Highlight Logic (Architect Note: 3.0s timeout)
-    if (!g_schematicSelection.selectedNodeId.empty() || !g_schematicSelection.selectedWireId.empty()) {
-        if (ImGui::GetTime() - g_schematicSelection.selectionTime > 3.0) {
-            g_schematicSelection.clear();
-        }
-    }
+    // Transient Highlight Logic (Architect Note: Evaluated in ImGuiApp loop for global sync)
 
     if (ImGui::BeginTable("SigTable", 2,
             ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
