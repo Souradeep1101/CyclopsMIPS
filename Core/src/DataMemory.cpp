@@ -1,6 +1,7 @@
 #include "Core/DataMemory.h"
 #include <cstring> // for memcpy
 #include <format>
+#include <algorithm>
 
 
 namespace MIPS {

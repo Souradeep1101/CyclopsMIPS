@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.20.1)
 
-# Project Name and Version (Explicitly enabling C and Objective-C for cross-platform backends)
-project(CyclopsMIPS VERSION 0.1.0 LANGUAGES C CXX OBJC)
+# Project Name and Version (Standard C/C++ for all platforms)
+project(CyclopsMIPS VERSION 0.1.0 LANGUAGES C CXX)
+
+# Explicitly enable Objective-C only on Apple platforms for Cocoa/AppKit backends
+if(APPLE)
+    enable_language(OBJC)
+endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
