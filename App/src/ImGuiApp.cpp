@@ -8,6 +8,7 @@
 #include <imgui_impl_opengl3.h>
 #include <nfd.h>
 #include <print>
+#include <chrono>
 #include "UI_Widgets.h"
 #include "Core/Logger.h"
 #include "Cyclops/Utils/PlatformUtils.h"
