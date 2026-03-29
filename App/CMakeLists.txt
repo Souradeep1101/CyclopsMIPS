@@ -81,7 +81,15 @@ target_compile_options(CyclopsApp PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /Zc:preprocessor /wd5054 /wd4100 /wd4189 /wd4244>
     
     # GCC/Clang Flags: Strict Pedantic Compliance, Warnings as Errors
-    $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:-Wall -Wextra -Werror -pedantic>
+    # Suppressing third-party UI warnings for compatibility across Clang/GCC/AppleClang
+    $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:
+        -Wall -Wextra -Werror -pedantic 
+        -Wno-unused-variable 
+        -Wno-unused-but-set-variable 
+        -Wno-sign-compare 
+        -Wno-missing-field-initializers 
+        -Wno-reorder-ctor
+    >
 )
 
 # 9. Core Linkage
