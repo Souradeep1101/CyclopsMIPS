@@ -1,14 +1,3 @@
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#include <commdlg.h>
-#endif
-
 #include "ImGuiApp.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -17,9 +6,11 @@
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <nfd.h>
 #include <print>
 #include "UI_Widgets.h"
 #include "Core/Logger.h"
+#include "Cyclops/Utils/PlatformUtils.h"
 #include <fstream>
 #include <sstream>
 #include "BrandAsset.h"
@@ -28,37 +19,11 @@
 namespace MIPS::UI {
 
 static std::string OpenFileDialog() {
-    char szFile[260] = { 0 };
-    OPENFILENAMEA ofn = { 0 };
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = NULL;
-    ofn.lpstrFile = szFile;
-    ofn.nMaxFile = sizeof(szFile);
-    ofn.lpstrFilter = "MIPS Assembly (*.s;*.asm)\0*.s;*.asm\0All Files (*.*)\0*.*\0";
-    ofn.nFilterIndex = 1;
-    ofn.lpstrFileTitle = NULL;
-    ofn.nMaxFileTitle = 0;
-    ofn.lpstrInitialDir = NULL;
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
-    if (GetOpenFileNameA(&ofn)) return std::string(szFile);
-    return "";
+    return Cyclops::FileDialogs::OpenFile("s,asm");
 }
 
 static std::string SaveFileDialog() {
-    char szFile[260] = { 0 };
-    OPENFILENAMEA ofn = { 0 };
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = NULL;
-    ofn.lpstrFile = szFile;
-    ofn.nMaxFile = sizeof(szFile);
-    ofn.lpstrFilter = "MIPS Assembly (*.s)\0*.s\0All Files (*.*)\0*.*\0";
-    ofn.nFilterIndex = 1;
-    ofn.lpstrFileTitle = NULL;
-    ofn.nMaxFileTitle = 0;
-    ofn.lpstrInitialDir = NULL;
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
-    if (GetSaveFileNameA(&ofn)) return std::string(szFile);
-    return "";
+    return Cyclops::FileDialogs::SaveFile("s");
 }
 
 void ApplyEngineeringPrecisionTheme() {
@@ -159,9 +124,6 @@ ImGuiApp::~ImGuiApp() {
         emuThread.join();
     }
 
-    // Release GPU texture memory before tearing down the GL context
-    CleanupArchitectureWidget();
-
     if (window) {
         if (m_logoTexture != 0) {
             glDeleteTextures(1, &m_logoTexture);
@@ -172,6 +134,7 @@ ImGuiApp::~ImGuiApp() {
         glfwDestroyWindow(window);
         glfwTerminate();
     }
+    NFD_Quit();
 }
 
 bool ImGuiApp::Initialize(int width, int height, const char* title) {
@@ -179,6 +142,9 @@ bool ImGuiApp::Initialize(int width, int height, const char* title) {
         std::println("Failed to initialize GLFW");
         return false;
     }
+
+    // Global NFD extended lifecycle
+    NFD_Init();
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
