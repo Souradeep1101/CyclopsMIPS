@@ -35,10 +35,7 @@ jobs:
 
     # 3. Configure the build tree (Standard C++23 Configuration)
     - name: Configure CMake
-      run: |
-        cmake -B build \
-          -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
     # 4. Build the entire project (Application, Core, and Tests)
     - name: Build Project
