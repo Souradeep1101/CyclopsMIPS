@@ -214,7 +214,10 @@ std::expected<ParsedInstruction, std::string> Parser::parseInstruction() {
       if (!regTokenOpt)
         return std::unexpected(regTokenOpt.error());
 
-      expect(TokenType::RParen, "Expected closing parenthesis ')'");
+      auto rParenOpt = expect(TokenType::RParen, "Expected closing parenthesis ')'");
+      if (!rParenOpt) {
+        return std::unexpected(rParenOpt.error());
+      }
 
       // Memory offset uses 2 operands: Immediate then Source Base Register
       instr.operands.push_back(std::stoi(immToken.value, nullptr, 0));
