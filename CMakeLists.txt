@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20.1)
 
-# Project Name and Version
-project(CyclopsMIPS VERSION 0.1.0 LANGUAGES CXX)
+# Project Name and Version (Explicitly enabling C and Objective-C for cross-platform backends)
+project(CyclopsMIPS VERSION 0.1.0 LANGUAGES C CXX OBJC)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
