@@ -1,3 +1,9 @@
+# Platform-specific Resources (Windows Icon)
+set(CYCLOPS_RESOURCES "")
+if(WIN32)
+    set(CYCLOPS_RESOURCES "resources/resource.rc")
+endif()
+
 add_executable(CyclopsApp
     main.cpp
     src/ImGuiApp.cpp
@@ -10,6 +16,8 @@ add_executable(CyclopsApp
     src/TextEditor.cpp
     src/TextureLoader.cpp
     src/UI_TerminalWidget.cpp
+    src/UI_Widgets.cpp
+    ${CYCLOPS_RESOURCES}
 )
 
 # Post-build: copy assets directory next to the executable

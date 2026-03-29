@@ -22,6 +22,8 @@
 #include "Core/Logger.h"
 #include <fstream>
 #include <sstream>
+#include "BrandAsset.h"
+#include "stb_image.h"
 
 namespace MIPS::UI {
 
@@ -161,6 +163,9 @@ ImGuiApp::~ImGuiApp() {
     CleanupArchitectureWidget();
 
     if (window) {
+        if (m_logoTexture != 0) {
+            glDeleteTextures(1, &m_logoTexture);
+        }
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
@@ -210,9 +215,43 @@ bool ImGuiApp::Initialize(int width, int height, const char* title) {
     
     ApplyEngineeringPrecisionTheme();
 
-    // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
+
+    // --- High-Fidelity Branding Initialization (AFTER GL CONTEXT IS READY) ---
+    stbi_set_flip_vertically_on_load(false);
+    int channels;
+    unsigned char* data = stbi_load_from_memory(logo_png, sizeof(logo_png), &m_logoWidth, &m_logoHeight, &channels, 4);
+    if (data && m_logoWidth > 0 && m_logoHeight > 0) {
+        glGenTextures(1, &m_logoTexture);
+        glBindTexture(GL_TEXTURE_2D, m_logoTexture);
+        
+        // Setup Bilinear Filtering for High-DPI Scaling
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        
+        // Ensure byte alignment (important for varying widths)
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_logoWidth, m_logoHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        
+        // --- System Icon Branding ---
+        GLFWimage images[1];
+        images[0].width = m_logoWidth;
+        images[0].height = m_logoHeight;
+        images[0].pixels = data;
+        glfwSetWindowIcon(window, 1, images);
+
+        stbi_image_free(data);
+        
+        Core::Logger::Get().Log(Core::Logger::Channel::Console, 
+            std::format("Brand Asset Initialized: {}x{} [ID:{}]", m_logoWidth, m_logoHeight, m_logoTexture));
+    } else {
+        std::string reason = data ? "Invalid Dimensions" : (stbi_failure_reason() ? stbi_failure_reason() : "Unknown STB error");
+        Core::Logger::Get().Log(Core::Logger::Channel::Console, "[Graphics] Branding Failed: " + reason);
+        if (data) stbi_image_free(data);
+    }
 
     // Start Emulator Thread
     emuThread = std::thread(&ImGuiApp::EmuThreadLoop, this);
@@ -304,6 +343,15 @@ void ImGuiApp::RenderUI() {
     // Optional Main Menu Bar for layout reset
     // Global Navbar & Menu System
     if (ImGui::BeginMainMenuBar()) {
+        // --- UX Architect: Centered Brand Icon ---
+        if (m_logoTexture) {
+            float barHeight = ImGui::GetWindowHeight();
+            float iconDim = 20.0f;
+            ImGui::SetCursorPosY((barHeight - iconDim) * 0.5f);
+            ImGui::Image((void*)(intptr_t)m_logoTexture, ImVec2(iconDim, iconDim));
+            ImGui::Dummy(ImVec2(8.0f, 0.0f)); 
+        }
+
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New Project", "Ctrl+N")) {
                 m_textEditor.SetText("");
@@ -407,7 +455,9 @@ void ImGuiApp::RenderUI() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help")) {
-            if (ImGui::MenuItem("About CyclopsMIPS")) { /* About Popup */ }
+            if (ImGui::MenuItem("About CyclopsMIPS")) { 
+                showAbout = true;
+            }
             if (ImGui::MenuItem("Interactive Walkthrough")) { /* Placeholder */ }
             ImGui::Separator();
             ImGui::TextDisabled("Version 1.0.0 (V1-Stable)");
@@ -420,6 +470,12 @@ void ImGuiApp::RenderUI() {
     if (trigger_reset) {
         SetupDefaultLayout(dockspace_id);
     }
+
+    // Modal UI Layer
+    if (showAbout) {
+        ImGui::OpenPopup("About CyclopsMIPS");
+    }
+    MIPS::UI::DrawAboutDialog(&showAbout, (ImTextureID)(intptr_t)m_logoTexture);
 
     // --- Execution Toolbar (Phase 2) ---
     ImGuiWindowFlags toolbar_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;

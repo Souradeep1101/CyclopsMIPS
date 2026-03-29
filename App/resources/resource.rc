@@ -1,0 +1,9 @@
+// Windows Resource Script for CyclopsMIPS
+// Stores the application icon metadata for the executable.
+
+// Resource ID for the Main Application Icon
+#define IDI_ICON1 101
+
+// Reference the .ico file located in the App/assets directory
+// Relative to this .rc file: ../assets/cyclops_icon.ico
+IDI_ICON1 ICON "../assets/cyclops_icon.ico"

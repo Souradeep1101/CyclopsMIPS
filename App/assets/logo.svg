@@ -1,0 +1,23 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g_neon_blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00E5FF"/>
+      <stop offset="100%" stop-color="#D500F9"/>
+    </linearGradient>
+    
+    <linearGradient id="g_neon_pink" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF007F"/>
+      <stop offset="100%" stop-color="#2D00F7"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="16" y="16" width="180" height="180" rx="40" fill="url(#g_neon_blue)"/>
+
+  <rect x="60" y="60" width="180" height="180" rx="40" fill="url(#g_neon_pink)"/>
+
+  <rect x="40" y="40" width="176" height="176" rx="16" fill="#000000"/>
+
+  <text x="64" y="140" fill="#FFFFFF" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="72" letter-spacing="-1">CM</text>
+
+  <rect x="68" y="156" width="32" height="8" fill="#00E5FF"/>
+</svg>

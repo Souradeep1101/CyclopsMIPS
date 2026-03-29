@@ -6,6 +6,7 @@
 #include "UI_Widgets.h"
 #include <thread>
 #include <atomic>
+#include <glad/glad.h>
 
 struct GLFWwindow;
 
@@ -49,6 +50,10 @@ private:
     bool showSignals = true;
     bool showTerminal = true;
     bool showControls = true;
+    bool showAbout = false; // Brand Modal State
+
+    GLuint m_logoTexture = 0; // High-DPI Brand Asset
+    int m_logoWidth = 0, m_logoHeight = 0;
 
     // Dynamic Terminals
     std::vector<TerminalInstance> terminals;

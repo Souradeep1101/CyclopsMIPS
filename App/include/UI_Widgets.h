@@ -4,6 +4,7 @@
 #include "Assembler/Assembler.h"
 #include "TextEditor.h"
 #include <string>
+#include <imgui.h>
 
 namespace MIPS::UI {
 
@@ -37,5 +38,6 @@ void DrawArchitectureWidget(const CPU& cpu, bool* p_open);
 void CleanupArchitectureWidget();
 void DrawSignalsWidget(const CPU& cpu, bool* p_open);
 void DrawTerminalWidget(bool* p_open, std::vector<TerminalInstance>& terminals, CPU& cpu, bool* stepRequested = nullptr);
+void DrawAboutDialog(bool* p_open, ImTextureID logoTexture);
 
 } // namespace MIPS::UI
