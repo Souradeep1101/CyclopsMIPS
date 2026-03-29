@@ -30,7 +30,7 @@ add_subdirectory("${CMAKE_SOURCE_DIR}/third_party/benchmark" "${CMAKE_BINARY_DIR
 # -----------------------------------------------------------------------
 add_executable(CyclopsTests
     # Layer 1: Component Unit Tests
-    Test_ALU.cpp
+    test_alu.cpp
     Test_RegFile.cpp
     Test_Instruction.cpp
     

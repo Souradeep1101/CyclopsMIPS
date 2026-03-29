@@ -86,6 +86,7 @@ target_compile_options(CyclopsApp PRIVATE
         -Wall -Wextra -Werror -pedantic 
         -Wno-unused-variable 
         -Wno-unused-but-set-variable 
+        -Wno-unused-parameter
         -Wno-sign-compare 
         -Wno-missing-field-initializers 
         -Wno-reorder-ctor
