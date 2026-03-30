@@ -7,7 +7,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <nfd.h>
-#include <print>
+#include "Core/CyclopsPrint.h"
 #include <chrono>
 #include "UI_Widgets.h"
 #include "Core/Logger.h"
@@ -140,7 +140,7 @@ ImGuiApp::~ImGuiApp() {
 
 bool ImGuiApp::Initialize(int width, int height, const char* title) {
     if (!glfwInit()) {
-        std::println("Failed to initialize GLFW");
+        Cyclops::println("Failed to initialize GLFW");
         return false;
     }
 
@@ -153,7 +153,7 @@ bool ImGuiApp::Initialize(int width, int height, const char* title) {
 
     window = glfwCreateWindow(width, height, title, nullptr, nullptr);
     if (!window) {
-        std::println("Failed to create GLFW window");
+        Cyclops::println("Failed to create GLFW window");
         glfwTerminate();
         return false;
     }
@@ -162,7 +162,7 @@ bool ImGuiApp::Initialize(int width, int height, const char* title) {
     glfwSwapInterval(1); // Enable vsync
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::println("Failed to initialize GLAD");
+        Cyclops::println("Failed to initialize GLAD");
         return false;
     }
 
