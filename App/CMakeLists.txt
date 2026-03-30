@@ -27,6 +27,10 @@ add_library(ImGui STATIC
 target_include_directories(ImGui PUBLIC "${IMGUI_DIR}" "${IMGUI_DIR}/backends" "${CMAKE_SOURCE_DIR}/third_party/glad/include")
 target_link_libraries(ImGui PUBLIC glfw)
 
+# 3.5 GLAD (OpenGL Loader)
+add_library(glad STATIC "${CMAKE_SOURCE_DIR}/third_party/glad/src/glad.c")
+target_include_directories(glad PUBLIC "${CMAKE_SOURCE_DIR}/third_party/glad/include")
+
 # 4. Create CyclopsApp Executable
 add_executable(CyclopsApp
     # Core Launcher
@@ -48,9 +52,6 @@ add_executable(CyclopsApp
     # Cross-Platform Logic Layers
     src/OpenGLDebug.cpp
     src/PlatformUtils.cpp
-
-    # Graphics Bootstrap (Direct Source)
-    "${CMAKE_SOURCE_DIR}/third_party/glad/src/glad.c"
 )
 
 # 5. Target Properties (Enforce Industry-Standard C++23)
@@ -102,6 +103,7 @@ target_link_libraries(CyclopsApp PRIVATE
     ImGui 
     nfd
     glfw
+    glad
 )
 
 # 10. OS-Specific Interface & Framework Linkage
