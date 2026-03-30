@@ -91,7 +91,7 @@ namespace MIPS::UI {
             for (const auto& snap : history) {
                 ImGui::TableNextRow();
                 
-                ImGui::TableNextColumn(); ImGui::Text("%llu", snap.cycle);
+                ImGui::TableNextColumn(); ImGui::Text("%llu", static_cast<unsigned long long>(snap.cycle));
                 
                 // Active highlighting using standard ImGui Color text for stages
                 // IF
