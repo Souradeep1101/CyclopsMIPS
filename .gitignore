@@ -17,3 +17,4 @@ test_output.txt
 
 # Python cache
 .venv/
+compile_commands.json

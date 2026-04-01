@@ -174,11 +174,12 @@ bool ImGuiApp::Initialize(int width, int height, const char* title) {
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; 
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-    // Setup Typography Hierarchy
-    io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 20.0f); // Default (Inter fallback)
-    ImFont* titleFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeuib.ttf", 24.0f); // Bold Header
-    ImFont* labelFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 18.0f); // Labels
-    ImFont* monoFont  = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consola.ttf", 20.0f); // Monospace Code
+    // Setup Typography Hierarchy using your bundled JetBrains Mono
+    // Assuming your folder is named 'fonts' and contains these files:
+    io.Fonts->AddFontFromFileTTF("assets/fonts/JetBrainsMono-Regular.ttf", 20.0f); 
+    ImFont* titleFont = io.Fonts->AddFontFromFileTTF("assets/fonts/JetBrainsMono-Bold.ttf", 24.0f); 
+    ImFont* labelFont = io.Fonts->AddFontFromFileTTF("assets/fonts/JetBrainsMono-Medium.ttf", 18.0f); 
+    ImFont* monoFont  = io.Fonts->AddFontFromFileTTF("assets/fonts/JetBrainsMono-Regular.ttf", 20.0f);
     
     ApplyEngineeringPrecisionTheme();
 
