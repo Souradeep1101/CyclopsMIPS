@@ -513,7 +513,11 @@ std::expected<void, std::string> CPU::fetch() {
   if_id.instr = Instruction{instrData};
   if_id.pcPlus4 = state.pc + 4;
   if_id.pc = state.pc;
-  if_id.valid = true;
+  if (instrData == 0x00000000) {
+      if_id.valid = false;
+  } else {
+      if_id.valid = true;
+  }
 
   if (pcOverride) {
     state.next_pc = pcOverrideValue;
