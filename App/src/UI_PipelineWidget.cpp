@@ -3,6 +3,7 @@
 #include "Assembler/Assembler.h"
 #include <imgui.h>
 #include <deque>
+#include <iostream>
 
 struct PipelineSnapshot {
     uint64_t cycle;
@@ -33,11 +34,31 @@ namespace MIPS::UI {
         }
 
         auto getMnemonic = [&](uint32_t pc) -> std::string {
-            if (program && program->sourceMap.count(pc)) {
-                return program->sourceMap.at(pc).mnemonic;
-            }
-            return "-";
-        };
+        // 1. Check if the program pointer is even arriving at the UI
+        if (!program) {
+            std::cout << "[UI DEBUG] FATAL: program pointer is NULL!" << std::endl;
+            return ""; // Returning empty string fixes the colored dash UI bug
+        }
+        
+        // 2. Standard Word Index
+        uint32_t wordIndex = pc / 4;
+        
+        // 3. MIPS Latch Offset (Latches often hold PC + 4)
+        uint32_t latchIndex = pc >= 4 ? (pc - 4) / 4 : ~(0u);
+        
+        std::cout << "[UI DEBUG] Lookup -> PC: 0x" << std::hex << pc 
+                  << " | Word: " << std::dec << wordIndex 
+                  << " | Latch Word: " << latchIndex << std::endl;
+
+        if (program->sourceMap.count(wordIndex)) {
+            return program->sourceMap.at(wordIndex).mnemonic;
+        }
+        if (latchIndex != ~(0u) && program->sourceMap.count(latchIndex)) {
+            return program->sourceMap.at(latchIndex).mnemonic;
+        }
+        
+        return ""; // Returning empty string fixes the colored dash UI bug
+    };
 
         // Record new cycle snapshot if emulator stepped!
         if (current_cycle > last_recorded_cycle || (current_cycle == 0 && history.empty())) {

@@ -192,7 +192,7 @@ Assembler::generateCode(const std::vector<ParsedInstruction>& instructions,
                 sourceStr += std::to_string(std::get<int32_t>(instr.operands[i]));
             }
         }
-        program.sourceMap[currentAddress] = { instr.lineNum, sourceStr };
+        program.sourceMap[currentAddress / 4] = { instr.lineNum, sourceStr };
 
         // ---------------------------------------------------------------
         // R-TYPE instructions: rd, rs, rt, shamt, funct

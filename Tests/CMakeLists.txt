@@ -42,6 +42,7 @@ add_executable(CyclopsTests
 
     # Legacy / Utility
     test_assembler.cpp
+    test_pipeline_mapping.cpp
 )
 
 target_link_libraries(CyclopsTests
