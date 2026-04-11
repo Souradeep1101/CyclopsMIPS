@@ -18,8 +18,9 @@ public:
     [[nodiscard]] std::expected<uint32_t, std::string> readWord(uint32_t address) const;
     [[nodiscard]] std::expected<void, std::string> writeWord(uint32_t address, uint32_t value);
     
-    // Direct memory inspection for UI without triggering cache hits
+    // Direct memory inspection for UI and syscalls without triggering cache hits
     [[nodiscard]] uint32_t readWordDirect(uint32_t address) const;
+    [[nodiscard]] uint8_t readByteDirect(uint32_t address) const;
 
     bool loadProgram(const std::vector<uint32_t>& binary, uint32_t startAddress = 0x0000);
     

@@ -1,20 +1,24 @@
 cmake_minimum_required(VERSION 3.20)
 
 # -----------------------------------------------------------------------
-# Google Test — via git submodule at Tests/third_party/googletest
+# Google Test — Consolidated to root third_party/googletest
 # -----------------------------------------------------------------------
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)    # Link against shared CRT (MSVC /MD)
 set(BUILD_GMOCK ON CACHE BOOL "" FORCE)
-add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
+
+# Point to the root-level third_party directory
+add_subdirectory("${CMAKE_SOURCE_DIR}/third_party/googletest" "${CMAKE_BINARY_DIR}/googletest_build" EXCLUDE_FROM_ALL)
 
 # -----------------------------------------------------------------------
-# Google Benchmark — via git submodule at Tests/third_party/benchmark
+# Google Benchmark — Consolidated to root third_party/benchmark
 # -----------------------------------------------------------------------
 set(BENCHMARK_ENABLE_TESTING  OFF CACHE BOOL "" FORCE)   # Don't run benchmark's own tests
 set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
 set(BENCHMARK_ENABLE_INSTALL  OFF CACHE BOOL "" FORCE)
 set(BENCHMARK_USE_BUNDLED_GTEST ON  CACHE BOOL "" FORCE)
-add_subdirectory(third_party/benchmark EXCLUDE_FROM_ALL)
+
+# Point to the root-level third_party directory
+add_subdirectory("${CMAKE_SOURCE_DIR}/third_party/benchmark" "${CMAKE_BINARY_DIR}/benchmark_build" EXCLUDE_FROM_ALL)
 
 # -----------------------------------------------------------------------
 # Suppress strict-warning flags for third-party code
@@ -22,12 +26,23 @@ add_subdirectory(third_party/benchmark EXCLUDE_FROM_ALL)
 # (googletest and benchmark are not our code; we don't want WX on them)
 
 # -----------------------------------------------------------------------
-# CyclopsTests — Google Test executable
+# CyclopsTests — Google Test Layered Suite (V1.0 Hardening)
 # -----------------------------------------------------------------------
 add_executable(CyclopsTests
-    test_assembler.cpp
-    test_cpu.cpp
+    # Layer 1: Component Unit Tests
     test_alu.cpp
+    Test_RegFile.cpp
+    Test_Instruction.cpp
+    
+    # Layer 2: Pipeline Integration Tests
+    Test_Hazards.cpp
+    
+    # Layer 3: Golden Master (E2E) Tests
+    Test_GoldenMaster.cpp
+
+    # Legacy / Utility
+    test_assembler.cpp
+    test_pipeline_mapping.cpp
 )
 
 target_link_libraries(CyclopsTests

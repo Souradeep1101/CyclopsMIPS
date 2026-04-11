@@ -1,0 +1,63 @@
+name: CyclopsMIPS CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  build:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+    # 1. Checkout with all vendored dependencies (GLFW, GLAD, NFD, GTest)
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    # 2. Setup Linux environment with X11, Wayland, and GTK3 headers
+    - name: Install Linux Dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev \
+          libgl1-mesa-dev libglu1-mesa-dev libgtk-3-dev \
+          libwayland-dev libxkbcommon-dev libwayland-egl1
+
+    # 3. Configure the build tree (Standard C++23 Configuration)
+    - name: Configure CMake
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+    # 4. Build the entire project (Application, Core, and Tests)
+    - name: Build Project
+      run: |
+        cmake --build build --config Debug --parallel 4
+
+    # 5. Execute automated regression tests (CyclopsTests)
+    # Using CTest for robust cross-platform test execution and reporting
+    - name: Run Automated Tests
+      working-directory: build
+      run: |
+        ctest -C Debug --output-on-failure
+
+    # 6. Capture and upload debug artifacts (7-day retention)
+    - name: Upload Debug Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: CyclopsApp-Debug-${{ matrix.os }}
+        path: |
+          build/**/bin/CyclopsApp*
+          build/**/bin/*.dll
+          build/**/bin/*.so
+          build/**/bin/*.dylib
+          build/**/assets/
+        retention-days: 7

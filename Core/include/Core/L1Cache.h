@@ -2,6 +2,7 @@
 #include "Core/MemoryBus.h"
 #include <array>
 #include <cstdint>
+#include <cstring>
 
 namespace MIPS {
 
@@ -10,7 +11,7 @@ class L1Cache {
 public:
   // Configurable latency properties
   static constexpr uint32_t CACHE_HIT_CYCLES = 0;
-  static constexpr uint32_t CACHE_MISS_CYCLES = 10;
+  static constexpr uint32_t CACHE_MISS_CYCLES = 0; // Ideal pipeline for education
 
   // Cache architecture: 4KB total size, 16 Byte Lines = 256 Lines
   static constexpr size_t LINE_SIZE = 16;
@@ -104,7 +105,8 @@ public:
       // Cache HIT (Write)
       stats_hits++;
       std::memcpy(&line.data[offset], &value, sizeof(uint32_t));
-      line.dirty = true;
+      line.dirty = false; // Write-Through: memory is in sync
+      (void)bus.writeWord(address, value); // Push directly to MemoryBus
       return CACHE_HIT_CYCLES;
     }
 
@@ -132,10 +134,11 @@ public:
 
     // 3. Apply the write to the fetched line
     std::memcpy(&line.data[offset], &value, sizeof(uint32_t));
+    (void)bus.writeWord(address, value); // Push directly to MemoryBus
 
     // 4. Update Metadata
     line.valid = true;
-    line.dirty = true; // It's now dirty!
+    line.dirty = false; // Write-Through: no longer dirty
     line.tag = tag;
 
     return CACHE_MISS_CYCLES;

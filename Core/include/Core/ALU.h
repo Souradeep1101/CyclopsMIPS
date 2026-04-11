@@ -17,7 +17,9 @@ enum class ALUControl {
   SRL,
   SRA,
   MULT,
-  DIV
+  MULTU,
+  DIV,
+  DIVU
 };
 
 struct ALUResult {

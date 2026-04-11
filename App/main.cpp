@@ -2,9 +2,7 @@
 #include "Core/CPU.h"
 #include "Core/MemoryBus.h"
 #include "ImGuiApp.h"
-#include <print>
-#include "Core/MemoryBus.h"
-#include <print>
+#include "Core/CyclopsPrint.h"
 
 using namespace MIPS;
 
@@ -19,7 +17,7 @@ int main() {
     )");
     
     if (!result) {
-        std::println("Assembler Error: {}", result.error());
+        Cyclops::println("Assembler Error: {}", result.error());
         return 1;
     }
 
@@ -28,11 +26,11 @@ int main() {
     // Start the UI
     MIPS::UI::ImGuiApp app(cpu, bus);
     if (!app.Initialize(1280, 720, "CyclopsMIPS Educator IDE")) {
-        std::println("Failed to initialize ImGui application");
+        Cyclops::println("Failed to initialize ImGui application");
         return 1;
     }
 
-    std::println("Starting CyclopsMIPS ImGui Educator...");
+    Cyclops::println("Starting CyclopsMIPS ImGui Educator...");
     app.Run();
 
     return 0;

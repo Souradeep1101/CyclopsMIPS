@@ -3,8 +3,10 @@
 #include "Core/MemoryBus.h"
 #include "Assembler/Assembler.h"
 #include "TextEditor.h"
+#include "UI_Widgets.h"
 #include <thread>
 #include <atomic>
+#include <glad/glad.h>
 
 struct GLFWwindow;
 
@@ -38,6 +40,23 @@ private:
     TextEditor m_textEditor;
     AssembledProgram activeProgram;
     bool hasCompiled = false;
+    
+    // UI Visibility (View Menu Sync)
+    bool showEditor = true;
+    bool showArch = true;
+    bool showMemory = true;
+    bool showRegisters = true;
+    bool showPipeline = true;
+    bool showSignals = true;
+    bool showTerminal = true;
+    bool showControls = true;
+    bool showAbout = false; // Brand Modal State
+
+    GLuint m_logoTexture = 0; // High-DPI Brand Asset
+    int m_logoWidth = 0, m_logoHeight = 0;
+
+    // Dynamic Terminals
+    std::vector<TerminalInstance> terminals;
 };
 
 } // namespace MIPS::UI

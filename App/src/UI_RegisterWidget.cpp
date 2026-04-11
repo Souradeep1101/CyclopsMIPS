@@ -3,8 +3,12 @@
 #include <imgui.h>
 
 namespace MIPS::UI {
-    void DrawRegisterWidget(CPU& cpu) {
-        ImGui::Begin("Registers");
+    void DrawRegisterWidget(CPU& cpu, bool* p_open) {
+        if (!*p_open) return;
+        if (!ImGui::Begin("Registers", p_open)) {
+            ImGui::End();
+            return;
+        }
         
         if (ImGui::BeginTable("RegTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
             ImGui::TableSetupColumn("Register");
@@ -13,7 +17,12 @@ namespace MIPS::UI {
 
             const auto& state = cpu.getState();
             for (int i = 0; i < 32; ++i) {
+                bool isChanged = (i == (int)state.lastChangedReg);
                 ImGui::TableNextRow();
+                if (isChanged) {
+                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(255, 216, 102, 80));
+                }
+
                 ImGui::TableSetColumnIndex(0);
                 ImGui::Text("R%d", i);
                 
@@ -23,7 +32,7 @@ namespace MIPS::UI {
                 int value = (int)state.regs[i];
                 ImGui::InputInt("##val", &value, 0, 0, ImGuiInputTextFlags_CharsHexadecimal);
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
-                    cpu.setRegister(i, (uint32_t)value);
+                    cpu.setRegister((uint8_t)i, (uint32_t)value);
                 }
                 ImGui::PopID();
             }

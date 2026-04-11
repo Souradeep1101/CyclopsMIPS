@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.20.1)
 
-# Project Name and Version
-project(CyclopsMIPS VERSION 0.1.0 LANGUAGES CXX)
+# Project Name and Version (Standard C/C++ for all platforms)
+project(CyclopsMIPS VERSION 0.1.0 LANGUAGES C CXX)
+
+# Explicitly enable Objective-C only on Apple platforms for Cocoa/AppKit backends
+if(APPLE)
+    enable_language(OBJC)
+endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -14,9 +19,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF) # Enforce strict ISO C++
 
 # Output directories (keeps your bin folder clean)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 # Add subdirectories
 add_subdirectory(Core)

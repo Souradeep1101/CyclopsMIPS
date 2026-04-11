@@ -2,6 +2,7 @@
 #include <expected>
 #include <string>
 #include <vector>
+#include <unordered_set>
 
 #include "ALU.h"
 #include "Core/BTB.h" // Added for Branch Target Buffer
@@ -23,8 +24,13 @@ class CPU {
 public:
   explicit CPU(MemoryBus& bus);
 
-  // Resets PC to 0, clears registers and latches
+  // pc to 0, clears registers and latches
   void reset();
+
+  // Breakpoint Management
+  void toggleBreakpoint(uint32_t pc);
+  bool hasBreakpoint(uint32_t pc) const;
+  void clearBreakpoints() { breakpoints.clear(); }
 
   // Loads binary machine code into memory starting at 0x0000
   bool loadProgram(const std::vector<uint32_t> &binary);
@@ -52,6 +58,11 @@ public:
 
   uint32_t hazardFlags = 0; // 0x1: Load-Use, 0x2: Branch Flush
 
+  // Forwarding state (set by execute(), read by UI)
+  // 0: no forward, 1: MEM/WB forward, 2: EX/MEM forward
+  uint8_t forwardA = 0;
+  uint8_t forwardB = 0;
+
 private:
   CpuState state;
   RegisterFile regFile;
@@ -59,6 +70,15 @@ private:
   
   // Thread-safe interrupt flag for Phase 8 MMIO integration
   std::atomic<bool> hardwareInterruptPending{false};
+
+public:
+  // Syscall & Debug State
+  std::unordered_set<uint32_t> breakpoints;
+  std::atomic<bool> waitingForInput{false};
+  uint32_t inputBuffer{0};
+
+private:
+  void handleSyscall();
 
   // Branch Target Buffer (Dynamic Branch Prediction)
   BTB btb;

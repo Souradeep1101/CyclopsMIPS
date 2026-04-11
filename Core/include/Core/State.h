@@ -41,6 +41,23 @@ struct CpuState {
 
     // Performance counters (updated by CPU each cycle)
     PerfCounters perf;
+
+    // Last-changed tracking for UI highlighting
+    uint8_t  lastChangedReg   = 0xFF; // 255 = none
+    uint32_t lastChangedAddr  = 0xFFFFFFFF;
+    uint64_t lastChangedCycle = 0;
+
+    void reset() {
+        regs.fill(0);
+        pc = 0;
+        next_pc = 0;
+        hi = 0;
+        lo = 0;
+        perf.reset();
+        lastChangedReg = 0xFF;
+        lastChangedAddr = 0xFFFFFFFF;
+        lastChangedCycle = 0;
+    }
 };
 
 } // namespace MIPS

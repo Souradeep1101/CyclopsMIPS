@@ -3,23 +3,32 @@
 #include <imgui.h>
 
 namespace MIPS::UI {
-    void DrawMemoryWidget(MemoryBus& bus) {
-        ImGui::Begin("Memory (Data)");
+    void DrawMemoryWidget(MemoryBus& bus, const CPU& cpu, bool* p_open) {
+        if (!*p_open) return;
+        if (!ImGui::Begin("Memory (Data)", p_open)) {
+            ImGui::End();
+            return;
+        }
         
         static int memOffset = 0;
         ImGui::InputInt("Address Offset", &memOffset, 4, 16, ImGuiInputTextFlags_CharsHexadecimal);
         if (memOffset < 0) memOffset = 0;
 
-        if (ImGui::BeginTable("MemTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
+        if (ImGui::BeginTable("MemTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY)) {
             ImGui::TableSetupColumn("Address");
             ImGui::TableSetupColumn("Value (Hex)");
             ImGui::TableHeadersRow();
 
-            for (int i = 0; i < 32; ++i) { // Show 32 words
-                uint32_t addr = memOffset + (i * 4);
+            for (int i = 0; i < 64; ++i) { // Show 64 words for better overview
+                uint32_t addr = (uint32_t)(memOffset + (i * 4));
                 uint32_t val = bus.readWordDirect(addr);
-                
+                bool isChanged = (addr == cpu.getState().lastChangedAddr);
+
                 ImGui::TableNextRow();
+                if (isChanged) {
+                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(255, 216, 102, 80));
+                }
+
                 ImGui::TableSetColumnIndex(0);
                 ImGui::Text("0x%08X", addr);
                 
@@ -29,7 +38,7 @@ namespace MIPS::UI {
                 int value = (int)val;
                 ImGui::InputInt("##val", &value, 0, 0, ImGuiInputTextFlags_CharsHexadecimal);
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
-                    bus.writeWord(addr, (uint32_t)value);
+                    (void)bus.writeWord(addr, (uint32_t)value);
                 }
                 ImGui::PopID();
             }

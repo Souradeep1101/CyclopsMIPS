@@ -14,3 +14,7 @@ err.txt
 build_err*.txt
 test_output.txt
 *.log
+
+# Python cache
+.venv/
+compile_commands.json

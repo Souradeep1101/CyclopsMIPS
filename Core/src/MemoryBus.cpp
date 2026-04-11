@@ -27,4 +27,8 @@ bool MemoryBus::loadProgram(const std::vector<uint32_t>& binary, uint32_t startA
     return ram.loadProgram(binary, startAddress);
 }
 
+uint8_t MemoryBus::readByteDirect(uint32_t address) const {
+    return ram.readByteDirect(address);
+}
+
 } // namespace MIPS

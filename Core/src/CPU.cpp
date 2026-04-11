@@ -1,5 +1,6 @@
 #include "Core/CPU.h"
 #include "Core/OpCode.h"
+#include "Core/Logger.h"
 #include <format>
 
 namespace MIPS {
@@ -11,12 +12,7 @@ CPU::CPU(MemoryBus& bus_ref)
 }
 
 void CPU::reset() {
-  state.pc = 0;
-  state.next_pc = 0;
-  state.regs.fill(0);
-  state.hi = 0;
-  state.lo = 0;
-  state.perf.reset();
+  state.reset();
 
   stallCycles = 0;
   stallSource = StallSource::None;
@@ -24,6 +20,7 @@ void CPU::reset() {
   pcOverrideValue = 0;
   flushNextFetch = false;
   loadUseHazard = false;
+  hazardFlags = 0;
 
   btb.reset();
   l1i_cache.reset();
@@ -43,6 +40,12 @@ bool CPU::loadProgram(const std::vector<uint32_t> &binary) {
 std::expected<void, std::string> CPU::step() {
   state.perf.cycles++; // Every call to step() = 1 clock cycle
   mem_wb_old = mem_wb; // Snapshot for pipeline forwarding
+
+  hazardFlags = 0; // FIX 3: Clear hazard flags at the start of every cycle!
+
+  // Clear last-changed tracking at start of cycle
+  state.lastChangedReg = 0xFF;
+  state.lastChangedAddr = 0xFFFFFFFF;
 
   if (stallCycles > 0) {
     stallCycles--;
@@ -84,6 +87,10 @@ std::expected<void, std::string> CPU::step() {
   }
 
   execute();
+  
+  if (id_ex.valid && id_ex.isSyscall) {
+    handleSyscall();
+  }
 
   auto decRes = decode();
   if (!decRes)
@@ -125,6 +132,8 @@ void CPU::writeBack() {
 
   if (mem_wb.regWrite && mem_wb.destReg != 0) {
     regFile.write(mem_wb.destReg, writeData);
+    state.lastChangedReg = mem_wb.destReg;
+    state.lastChangedCycle = state.perf.cycles;
   }
 }
 
@@ -159,6 +168,8 @@ std::expected<void, std::string> CPU::memoryAccess() {
       stallSource = StallSource::Memory;
       return {}; // Stall request
     }
+    state.lastChangedAddr = ex_mem.aluResult;
+    state.lastChangedCycle = state.perf.cycles;
   }
 
   return {};
@@ -170,9 +181,9 @@ void CPU::execute() {
     return;
   }
 
-  // Forwarding Unit
-  uint8_t forwardA = 0; // 0: ID/EX, 1: MEM/WB, 2: EX/MEM
-  uint8_t forwardB = 0;
+  // Forwarding Unit — write directly to public members for UI observability
+  forwardA = 0; // 0: ID/EX, 1: MEM/WB, 2: EX/MEM
+  forwardB = 0;
 
   // EX Hazard (Forward from EX/MEM)
   if (enableForwarding) {
@@ -217,7 +228,7 @@ void CPU::execute() {
   auto aluRes = ALU::execute(operand1, operand2, id_ex.aluCtrl, id_ex.shamt);
   ex_mem.aluResult = aluRes.result;
 
-  // HI/LO Register Write (happens in EX stage for this simulation)
+  // HI/LO Register Write
   if (aluRes.writesHiLo) {
     state.hi = aluRes.hiResult;
     state.lo = aluRes.result;
@@ -226,19 +237,14 @@ void CPU::execute() {
   // Destination Register Mux
   ex_mem.destReg = id_ex.regDst ? id_ex.rd : id_ex.rt;
 
-  // Pass-through
+  // Pass-through control signals mapping to the new EX_MEM struct
   ex_mem.pc = id_ex.pc;
-  ex_mem.writeData = forwardBData; // Pushed forward data to Memory
+  ex_mem.writeData = forwardBData; 
   ex_mem.memRead = id_ex.memRead;
   ex_mem.memWrite = id_ex.memWrite;
   ex_mem.regWrite = id_ex.regWrite;
   ex_mem.memToReg = id_ex.memToReg;
   ex_mem.valid = true;
-
-  // printf("EXEC[PC=%d]: valid=%d, fA=%d, fB=%d, op1=%d, op2=%d, aluRes=%d, destReg=%d, mwb_old(v=%d,rW=%d,d=%d,m2r=%d,rD=%d,aR=%d), rs=%d, rt=%d\n",
-  //        id_ex.pcPlus4 - 4, id_ex.valid, forwardA, forwardB, operand1, operand2, ex_mem.aluResult, ex_mem.destReg,
-  //        mem_wb_old.valid, mem_wb_old.regWrite, mem_wb_old.destReg, mem_wb_old.memToReg, mem_wb_old.readData, mem_wb_old.aluResult,
-  //        id_ex.rs, id_ex.rt);
 }
 
 std::expected<void, std::string> CPU::decode() {
@@ -258,8 +264,6 @@ std::expected<void, std::string> CPU::decode() {
     state.next_pc = state.pc; 
     loadUseHazard = true;
 
-    // Preserving IF/ID latch is handled by skipping fetch() in step()
-    
     // Insert a bubble into ID_EX
     id_ex.regDst = false;
     id_ex.aluSrc = false;
@@ -281,7 +285,7 @@ std::expected<void, std::string> CPU::decode() {
   id_ex.rd = instr.rd();
   id_ex.shamt = instr.shamt();
 
-  // Read Register File (in a real CPU, this happens concurrently with control logic)
+  // Read Register File
   uint32_t regData1_raw = regFile.read(rs);
   uint32_t regData2_raw = regFile.read(rt);
 
@@ -314,24 +318,23 @@ std::expected<void, std::string> CPU::decode() {
   id_ex.memWrite = false;
   id_ex.regWrite = false;
   id_ex.memToReg = false;
+  id_ex.branch = false;
+  id_ex.isBranchTaken = false; 
+  id_ex.branchTarget = 0;
   id_ex.aluCtrl = ALUControl::NONE;
 
   // Decode Logic & Branch Resolution
   if (op == static_cast<uint8_t>(OpCode::R_TYPE)) {
     uint8_t funct = instr.funct();
     if (funct == static_cast<uint8_t>(Funct::JR)) {
-      // JR is an unconditional jump, but target is from register.
-      // It's a control hazard.
       pcOverride = true;
       pcOverrideValue = id_ex.regData1;
-      flushNextFetch = true; // Flush IF stage
-      id_ex.valid = false;   // Bubble in EX stage
+      flushNextFetch = true; 
+      id_ex.valid = false;   
       return {};
     }
 
     id_ex.regDst = true;
-    // For R-type instructions that write to a register (most of them)
-    // SLL with rd=0 is a NOP and should not write.
     if (funct == static_cast<uint8_t>(Funct::ADD)) {
       id_ex.regWrite = true;
       id_ex.aluCtrl = ALUControl::ADD;
@@ -354,15 +357,12 @@ std::expected<void, std::string> CPU::decode() {
       id_ex.regWrite = true;
       id_ex.aluCtrl = ALUControl::NOR;
     } else if (funct == static_cast<uint8_t>(Funct::SLL)) {
-      // SLL with rd=0, rt=0, shamt=0 is a NOP.
-      // If rd is not 0, it's a valid SLL instruction and should write.
       if (id_ex.rd != 0) {
         id_ex.regWrite = true;
         id_ex.aluCtrl = ALUControl::SLL;
       } else {
-        // NOP (sll $0, $0, 0)
         id_ex.regWrite = false;
-        id_ex.aluCtrl = ALUControl::NONE; // Valid NOP, no ALU op needed
+        id_ex.aluCtrl = ALUControl::NONE; 
       }
     } else if (funct == static_cast<uint8_t>(Funct::SRL)) {
       id_ex.regWrite = true;
@@ -387,7 +387,11 @@ std::expected<void, std::string> CPU::decode() {
       id_ex.aluCtrl = ALUControl::ADD;
       id_ex.regData1 = state.lo;
       id_ex.aluSrc = true;
+      id_ex.aluSrc = true;
       id_ex.signExtImm = 0;
+    } else if (funct == static_cast<uint8_t>(Funct::SYSCALL)) {
+      id_ex.isSyscall = true;
+      id_ex.valid = true;
     } else {
       return std::unexpected(std::format("Unknown R-Type Funct: {:#x}", funct));
     }
@@ -415,33 +419,29 @@ std::expected<void, std::string> CPU::decode() {
 
     uint32_t target = id_ex.pcPlus4 + (id_ex.signExtImm << 2);
 
-    // Update BTB
+    id_ex.branch = true;
+    id_ex.isBranchTaken = shouldBranch;
+    id_ex.branchTarget = target;
+
     if (enableBranchPrediction) {
       btb.update(if_id.pc, target, shouldBranch);
     }
 
     if (shouldBranch) {
       if (enableBranchPrediction && if_id.predictedTaken && if_id.predictedTarget == target) {
-        // Correct prediction! No flush.
       } else {
-        // Mispredicted not taken (or wrong target). Flush IF, jump.
         pcOverride = true;
         pcOverrideValue = target;
         flushNextFetch = true;
       }
     } else {
       if (enableBranchPrediction && if_id.predictedTaken) {
-        // Mispredicted taken. Flush IF, resume normal execution.
         pcOverride = true;
         pcOverrideValue = id_ex.pcPlus4;
         flushNextFetch = true;
-      } else {
-        // Correct prediction (Not Taken). No flush.
       }
     }
 
-    // Branch instruction itself does not modify registers or memory in
-    // EX/MEM/WB
     id_ex.regDst = false;
     id_ex.aluSrc = false;
     id_ex.memRead = false;
@@ -449,30 +449,24 @@ std::expected<void, std::string> CPU::decode() {
     id_ex.regWrite = false;
     id_ex.memToReg = false;
     id_ex.aluCtrl = ALUControl::NONE;
-    id_ex.valid = true;
+    id_ex.valid = false; // FIX 4: Kills the BEQ/BNE so it doesn't enter EX
 
   } else if (op == static_cast<uint8_t>(OpCode::J) ||
              op == static_cast<uint8_t>(OpCode::JAL)) {
     uint32_t target = (id_ex.pcPlus4 & 0xF0000000) | (instr.target() << 2);
 
-    // Update BTB
     if (enableBranchPrediction) {
       btb.update(if_id.pc, target, true);
     }
 
     if (enableBranchPrediction && if_id.predictedTaken && if_id.predictedTarget == target) {
-      // Correct prediction!
     } else {
-      // Mispredict!
       pcOverride = true;
       pcOverrideValue = target;
       flushNextFetch = true;
     }
 
     if (op == static_cast<uint8_t>(OpCode::JAL)) {
-      // JAL writes PC+8 to $ra ($31)
-      // Wait, in our pipeline, `id_ex.pcPlus4` is PC+4 of the branch
-      // instruction. We write `id_ex.pcPlus4 + 4` (which is PC+8) to reg 31.
       id_ex.regWrite = true;
       id_ex.rd = 31; // $ra
       id_ex.regDst = true;
@@ -481,14 +475,15 @@ std::expected<void, std::string> CPU::decode() {
       id_ex.regData1 = id_ex.pcPlus4 + 4;
       id_ex.aluSrc = true;
       id_ex.signExtImm = 0;
+      id_ex.valid = true; // JAL must propagate to WB
     } else {
       id_ex.regWrite = false;
       id_ex.aluCtrl = ALUControl::NONE;
+      id_ex.valid = false; // FIX 4: J doesn't do anything else, kill it here
     }
 
     id_ex.memRead = false;
     id_ex.memWrite = false;
-    id_ex.valid = true;
   } else {
     return std::unexpected(std::format("Unknown OpCode: {:#x}", op));
   }
@@ -499,14 +494,9 @@ std::expected<void, std::string> CPU::decode() {
 std::expected<void, std::string> CPU::fetch() {
   // Instruction Fetch
   if (flushNextFetch) {
-    // A branch was mispredicted in ID.
-    // The instruction we would normally fetch right now is from the wrong path
-    // (state.pc). We MUST fetch a bubble.
+    if_id.pc = state.pc; // FIX 2 (Backend): Record what IF was trying to fetch for the UI
     if_id.valid = false;
-
-    // Apply PC correction
     state.next_pc = pcOverrideValue;
-
     flushNextFetch = false;
     pcOverride = false;
     return {};
@@ -523,12 +513,13 @@ std::expected<void, std::string> CPU::fetch() {
   if_id.instr = Instruction{instrData};
   if_id.pcPlus4 = state.pc + 4;
   if_id.pc = state.pc;
-  if_id.valid = true;
+  if (instrData == 0x00000000) {
+      if_id.valid = false;
+  } else {
+      if_id.valid = true;
+  }
 
   if (pcOverride) {
-    // A branch mispredict in ID happened, but wait, flushNextFetch handles the
-    // bubble + PC correction. If pcOverride is true without flushNextFetch,
-    // it's an architectural jump (like exceptions, later).
     state.next_pc = pcOverrideValue;
     pcOverride = false;
   } else {
@@ -545,6 +536,43 @@ std::expected<void, std::string> CPU::fetch() {
   }
 
   return {};
+}
+
+void CPU::handleSyscall() {
+    uint32_t v0 = regFile.read(2); // $v0
+    switch (v0) {
+        case 1: // Print Integer
+            Core::Logger::Get().Log(Core::Logger::Channel::Console, 
+                std::format("{}", (int)regFile.read(4))); // $a0
+            break;
+        case 4: { // Print String
+            uint32_t addr = regFile.read(4);
+            std::string s;
+            char c;
+            while ((c = (char)bus.readByteDirect(addr++)) != '\0') s += c;
+            Core::Logger::Get().Log(Core::Logger::Channel::Console, s);
+            break;
+        }
+        case 5: // Read Integer (Blocking)
+            waitingForInput = true;
+            // The UI will set inputBuffer and clear waitingForInput.
+            // In a real MIPS this would be a blocking pause. 
+            // Our EmuThread yields when waitingForInput is true.
+            break;
+        case 10: // Exit
+            Core::Logger::Get().Log(Core::Logger::Channel::Emulation, "Program exited via Syscall 10.");
+            // We could set a 'halted' flag here
+            break;
+    }
+}
+
+void CPU::toggleBreakpoint(uint32_t pc) {
+    if (breakpoints.count(pc)) breakpoints.erase(pc);
+    else breakpoints.insert(pc);
+}
+
+bool CPU::hasBreakpoint(uint32_t pc) const {
+    return breakpoints.count(pc) != 0;
 }
 
 } // namespace MIPS
