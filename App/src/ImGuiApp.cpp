@@ -189,7 +189,13 @@ bool ImGuiApp::Initialize(int width, int height, const char* title) {
     // --- High-Fidelity Branding Initialization (AFTER GL CONTEXT IS READY) ---
     stbi_set_flip_vertically_on_load(false);
     int channels;
-    unsigned char* data = stbi_load_from_memory(logo_png, sizeof(logo_png), &m_logoWidth, &m_logoHeight, &channels, 4);
+    // Prioritize loading from disk assets to allow live branding updates without recompilation
+    unsigned char* data = stbi_load("assets/logo.png", &m_logoWidth, &m_logoHeight, &channels, 4);
+    if (!data) {
+        // Fallback to embedded BrandAsset buffer if disk file is missing or corrupted
+        data = stbi_load_from_memory(logo_png, sizeof(logo_png), &m_logoWidth, &m_logoHeight, &channels, 4);
+    }
+
     if (data && m_logoWidth > 0 && m_logoHeight > 0) {
         glGenTextures(1, &m_logoTexture);
         glBindTexture(GL_TEXTURE_2D, m_logoTexture);
@@ -311,15 +317,6 @@ void ImGuiApp::RenderUI() {
     // Optional Main Menu Bar for layout reset
     // Global Navbar & Menu System
     if (ImGui::BeginMainMenuBar()) {
-        // --- UX Architect: Centered Brand Icon ---
-        if (m_logoTexture) {
-            float barHeight = ImGui::GetWindowHeight();
-            float iconDim = 20.0f;
-            ImGui::SetCursorPosY((barHeight - iconDim) * 0.5f);
-            ImGui::Image((void*)(intptr_t)m_logoTexture, ImVec2(iconDim, iconDim));
-            ImGui::Dummy(ImVec2(8.0f, 0.0f)); 
-        }
-
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New Project", "Ctrl+N")) {
                 m_textEditor.SetText("");
