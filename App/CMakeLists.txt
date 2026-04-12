@@ -54,6 +54,11 @@ add_executable(CyclopsApp
     src/PlatformUtils.cpp
 )
 
+# 4.5 Windows Executable Icon (Embedded via Resource Script)
+if(WIN32)
+    target_sources(CyclopsApp PRIVATE resources/resource.rc)
+endif()
+
 # 5. Target Properties (Enforce Industry-Standard C++23)
 target_compile_features(CyclopsApp PRIVATE cxx_std_23)
 
